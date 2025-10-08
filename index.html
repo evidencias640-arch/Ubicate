@@ -47,87 +47,147 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbw2XgCXoxi0KkvjKRbuf7B0WXSedkPaEOYJw-roLsNWiJryWKWAAP_bzLAxRL57eX--fg/exec'; // 🔗 Tu Web App URL
+const API_URL = 'https://script.google.com/macros/s/AKfycbw2XgCXoxi0KkvjKRbuf7B0WXSedkPaEOYJw-roLsNWiJryWKWAAP_bzLAxRL57eX--fg/exec'; // ✅ Web App pública
 
-// --- LOGIN ---
-document.getElementById('btnLogin').onclick = async ()=>{
+// ======================= LOGIN =======================
+document.getElementById('btnLogin').addEventListener('click', async ()=>{
   const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value.trim();
   const mode = document.getElementById('mode').value;
+  const msg = document.getElementById('loginMsg');
 
-  document.getElementById('loginMsg').innerText = 'Autenticando...';
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ action:'login', email, password })
-  }).then(r=>r.json());
-
-  if(res.success){
-    document.getElementById('loginMsg').innerText = '✅ Bienvenido ' + res.user.email;
-    if(mode==='tracker'){ 
-      document.getElementById('trackerPanel').style.display='block'; 
-    } else { 
-      document.getElementById('devicePanel').style.display='block'; 
-    }
-    document.getElementById('loginPanel').style.display='none';
-  } else {
-    document.getElementById('loginMsg').innerText = '❌ ' + res.message;
+  if(!email || !password){
+    msg.innerText = '⚠️ Completa los campos.';
+    return;
   }
-};
 
-// --- MAPA TRACKER ---
+  msg.innerText = '🔐 Autenticando...';
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'login', email, password })
+    });
+    const data = await res.json();
+
+    if(data.success){
+      msg.innerText = '✅ Bienvenido';
+      document.getElementById('loginPanel').style.display='none';
+      if(mode === 'tracker'){
+        document.getElementById('trackerPanel').style.display='block';
+      } else {
+        document.getElementById('devicePanel').style.display='block';
+      }
+      window.localStorage.setItem('codigo_x', data.codigo_x);
+    } else {
+      msg.innerText = '❌ ' + (data.message || 'Credenciales incorrectas');
+    }
+  } catch(err){
+    msg.innerText = '🚫 Error de conexión';
+    console.error(err);
+  }
+});
+
+// ======================= MAPA (TRACKER) =======================
 let map, marker, trackTimer;
 function initMap(){
   if(map) return;
-  map = L.map('map').setView([0,0],2);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);
+  map = L.map('map').setView([0,0], 2);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
 }
-document.getElementById('btnStartTrack').onclick = ()=>{
+
+document.getElementById('btnStartTrack').addEventListener('click', ()=>{
   initMap();
   const code = document.getElementById('trackCode').value.trim();
   if(!code){ alert('Código requerido'); return; }
-  if(trackTimer) clearInterval(trackTimer);
+
+  document.getElementById('statusTrack').innerText = '🔍 Iniciando seguimiento...';
+
   const fetchLocation = async ()=>{
-    const res = await fetch(`${API_URL}?action=getLocation&code=${code}`).then(r=>r.json());
-    if(res.success){
-      const {lat, lon, updated_at} = res;
-      if(!marker) marker = L.marker([lat, lon]).addTo(map);
-      else marker.setLatLng([lat, lon]);
-      map.setView([lat, lon],15);
-      document.getElementById('statusTrack').innerText = `📍 ${lat.toFixed(5)}, ${lon.toFixed(5)} (${updated_at})`;
+    try {
+      const res = await fetch(`${API_URL}?codigo_x=${code}`);
+      const data = await res.json();
+
+      if(data.lat && data.lon){
+        const { lat, lon, ultima_actualizacion } = data;
+        if(!marker) marker = L.marker([lat, lon]).addTo(map);
+        else marker.setLatLng([lat, lon]);
+        map.setView([lat, lon], 15);
+        document.getElementById('statusTrack').innerText = 
+          `📍 ${lat.toFixed(5)}, ${lon.toFixed(5)} (${ultima_actualizacion})`;
+      } else {
+        document.getElementById('statusTrack').innerText = '⚠️ No se encontraron coordenadas.';
+      }
+    } catch(err){
+      console.warn('Error obteniendo ubicación:', err);
+      document.getElementById('statusTrack').innerText = '⚠️ Error de conexión.';
     }
   };
-  fetchLocation();
-  trackTimer = setInterval(fetchLocation, 10000);
-};
-document.getElementById('btnStopTrack').onclick = ()=>{
-  if(trackTimer) clearInterval(trackTimer);
-  document.getElementById('statusTrack').innerText = 'Detenido.';
-};
 
-// --- MODO DISPOSITIVO ---
-let sendTimer;
-document.getElementById('btnStartSend').onclick = ()=>{
+  fetchLocation(); // primera llamada
+  trackTimer = setInterval(fetchLocation, 10000); // cada 10 seg
+});
+
+document.getElementById('btnStopTrack').addEventListener('click', ()=>{
+  if(trackTimer) clearInterval(trackTimer);
+  document.getElementById('statusTrack').innerText = '🛑 Seguimiento detenido.';
+});
+
+// ======================= MODO DISPOSITIVO =======================
+let watchId = null;
+
+document.getElementById('btnStartSend').addEventListener('click', ()=>{
   const code = document.getElementById('deviceCode').value.trim();
   if(!code){ alert('Código requerido'); return; }
-  const send = async ()=>{
-    navigator.geolocation.getCurrentPosition(async pos=>{
-      const lat=pos.coords.latitude, lon=pos.coords.longitude;
+
+  document.getElementById('statusDevice').innerText = '📡 Activando GPS...';
+
+  if(!navigator.geolocation){
+    alert('Tu navegador no soporta geolocalización.');
+    return;
+  }
+
+  // watchPosition actualiza en tiempo real y consume menos
+  watchId = navigator.geolocation.watchPosition(async pos=>{
+    const lat = pos.coords.latitude;
+    const lon = pos.coords.longitude;
+
+    try {
       const res = await fetch(API_URL, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ action:'updateLocation', codigo_x: code, lat, lon })
-      }).then(r=>r.json());
-      document.getElementById('statusDevice').innerText = `📤 ${lat.toFixed(5)},${lon.toFixed(5)} — ${new Date().toLocaleTimeString()}`;
-    });
-  };
-  send();
-  sendTimer = setInterval(send, 10000);
-};
-document.getElementById('btnStopSend').onclick = ()=>{
-  if(sendTimer) clearInterval(sendTimer);
-  document.getElementById('statusDevice').innerText = 'Detenido.';
-};
+      });
+      const data = await res.json();
+      if(data.success){
+        document.getElementById('statusDevice').innerText = 
+          `📤 ${lat.toFixed(5)}, ${lon.toFixed(5)} — ${new Date().toLocaleTimeString()}`;
+      } else {
+        document.getElementById('statusDevice').innerText = '⚠️ Error al enviar datos.';
+      }
+    } catch(err){
+      console.error('Error al actualizar ubicación:', err);
+      document.getElementById('statusDevice').innerText = '🚫 Conexión fallida.';
+    }
+  }, 
+  err=>{
+    console.warn('Error de geolocalización:', err);
+    document.getElementById('statusDevice').innerText = '⚠️ Error obteniendo ubicación.';
+  },
+  { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
+});
+
+document.getElementById('btnStopSend').addEventListener('click', ()=>{
+  if(watchId !== null){
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  document.getElementById('statusDevice').innerText = '🛑 Envío detenido.';
+});
 </script>
+
 </body>
 </html>
