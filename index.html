@@ -1,193 +1,498 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Tracking Map</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ubicate — Sistema Parejas (Login + Admin)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <style>
-    body { font-family: Arial, sans-serif; margin:0; padding:0; background:#f5f5f5; }
-    #app { max-width:600px; margin:auto; padding:20px; }
-    .panel { background:#fff; padding:15px; border-radius:10px; margin-bottom:15px; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
-    input, button, select { width:100%; padding:10px; margin-top:8px; border-radius:6px; border:1px solid #ccc; }
-    #map { height:60vh; border-radius:10px; margin-top:10px; }
+    /* Estilo simple y responsivo */
+    :root{--bg:#f4f6f8;--card:#fff;--accent:#1867c0}
+    body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg);color:#111;padding:12px}
+    .container{max-width:1100px;margin:0 auto}
+    .card{background:var(--card);padding:12px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.06);margin-bottom:12px}
+    h2,h3{margin:6px 0}
+    label{display:block;font-weight:600;margin-bottom:6px}
+    input,select,button,textarea{padding:8px;border-radius:8px;border:1px solid #d0d7de;width:100%;box-sizing:border-box}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    .col{flex:1;min-width:180px}
+    .two{width:calc(50% - 8px)}
+    @media(max-width:720px){.two{width:100%}}
+    button{cursor:pointer;background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px}
+    button.ghost{background:#fff;color:var(--accent);border:1px solid #dbe7f5}
+    .small{font-size:0.9rem;color:#444}
+    #map,#adminMap{height:60vh;border-radius:8px;margin-top:8px}
+    .tbl{width:100%;border-collapse:collapse}
+    .tbl th, .tbl td{padding:8px;border-bottom:1px solid #eee;text-align:left}
+    .badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:0.85rem}
+    .online{background:#e6ffed;color:#0a7a2a}
+    .offline{background:#fff0f0;color:#9b1c1c}
   </style>
 </head>
 <body>
-<div id="app">
-  <div class="panel" id="loginPanel">
-    <h3>Iniciar sesión</h3>
-    <input type="email" id="email" placeholder="Correo" />
-    <input type="password" id="password" placeholder="Contraseña" />
-    <select id="mode">
-      <option value="tracker">Rastreador</option>
-      <option value="device">Dispositivo</option>
-    </select>
-    <button id="btnLogin">Entrar</button>
-    <div id="loginMsg"></div>
+  <div class="container">
+
+    <div class="card">
+      <h2>Ubicate — Sistema Parejas</h2>
+      <p class="small">Inicia sesión con tu número (usuario) y contraseña. Si eres administrador tendrás acceso al panel completo.</p>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="card" id="loginCard">
+      <h3>Iniciar Sesión</h3>
+      <div class="row">
+        <div class="col">
+          <label>Número de teléfono (usuario)</label>
+          <input id="loginUser" placeholder="Ej. 3123456789" />
+        </div>
+        <div class="col">
+          <label>Contraseña</label>
+          <input id="loginPass" type="password" />
+        </div>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button id="btnLogin">Entrar</button>
+        <button class="ghost" id="btnShowReqForm">Solicitar cuenta</button>
+        <button class="ghost" id="btnLogout" style="display:none">Cerrar sesión</button>
+      </div>
+      <div id="loginMsg" class="small" style="margin-top:8px"></div>
+    </div>
+
+    <!-- REQUEST FORM (registro como solicitud) -->
+    <div class="card" id="requestCard" style="display:none">
+      <h3>Solicitar cuenta (se revisa por admin)</h3>
+      <div class="row">
+        <div class="col">
+          <label>Nombre</label><input id="reqName" />
+        </div>
+        <div class="col">
+          <label>Correo</label><input id="reqEmail" />
+        </div>
+        <div class="col">
+          <label>Teléfono (usuario)</label><input id="reqPhone" />
+        </div>
+        <div class="col">
+          <label>Edad</label><input id="reqAge" type="number" min="16" />
+        </div>
+        <div class="col">
+          <label>Sexo</label>
+          <select id="reqSex"><option value="">Selecciona</option><option>F</option><option>M</option><option>Otro</option></select>
+        </div>
+        <div class="col">
+          <label>Contraseña</label><input id="reqPass" type="password" />
+          <div class="small">Mín: 8 chars, ≥2 mayus, ≥2 minis, ≥2 números, ≥1 especial</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button id="btnSubmitRequest">Enviar Solicitud</button>
+        <button id="btnHideReq" class="ghost">Cancelar</button>
+      </div>
+      <div id="reqMsg" class="small" style="margin-top:8px"></div>
+    </div>
+
+    <!-- MAIN INTERFACE (visible después de login) -->
+    <div id="mainUI" style="display:none">
+      <div class="card">
+        <h3>Bienvenido <span id="userName"></span> — Código: <span id="userCode"></span></h3>
+        <div class="small">Tu sesión: <span id="userRole"></span></div>
+      </div>
+
+      <!-- Emparejar -->
+      <div class="card">
+        <h3>Emparejar con pareja</h3>
+        <div class="row">
+          <div class="two">
+            <label>Código de tu pareja</label>
+            <input id="partnerCode" placeholder="Pega el código de la pareja" />
+          </div>
+          <div class="two" style="align-self:end">
+            <button id="btnPair">Emparejar</button>
+          </div>
+        </div>
+        <div id="pairMsg" class="small" style="margin-top:8px"></div>
+      </div>
+
+      <!-- Selección de modo -->
+      <div class="card">
+        <h3>Modos</h3>
+        <div class="row">
+          <select id="modeSelect" style="max-width:320px">
+            <option value="tracker">Rastreador (ver pareja)</option>
+            <option value="device">Dispositivo (enviar ubicación)</option>
+          </select>
+          <div style="flex:1"></div>
+          <button id="btnOpenMode">Abrir</button>
+        </div>
+      </div>
+
+      <!-- DEVICE -->
+      <div id="devicePanel" class="card" style="display:none">
+        <h3>Modo Dispositivo (enviar ubicación)</h3>
+        <div class="small">Tu código: <strong id="deviceCode"></strong></div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button id="btnStartSend">Iniciar envío (background)</button>
+          <button class="ghost" id="btnStopSend">Detener envío</button>
+        </div>
+        <div id="statusDevice" class="small" style="margin-top:8px"></div>
+      </div>
+
+      <!-- TRACKER -->
+      <div id="trackerPanel" class="card" style="display:none">
+        <h3>Modo Rastreador</h3>
+        <div class="small">Código a seguir (tu pareja):</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input id="trackCode" placeholder="Código pareja" />
+          <button id="btnStartTrack">Comenzar</button>
+          <button class="ghost" id="btnStopTrack">Detener</button>
+        </div>
+        <div id="statusTrack" class="small" style="margin-top:8px"></div>
+        <div id="map"></div>
+      </div>
+
+      <!-- ADMIN -->
+      <div id="adminPanel" class="card" style="display:none">
+        <h3>ADMIN — Dashboard</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button id="btnRefresh">Refrescar datos</button>
+          <button id="btnShowAll">Mostrar todas ubicaciones</button>
+          <button id="btnShowRequests">Solicitudes pendientes</button>
+        </div>
+        <div id="adminMsg" class="small" style="margin-top:8px"></div>
+
+        <div style="display:flex;gap:12px;margin-top:12px">
+          <div style="flex:1">
+            <h4>Usuarios</h4>
+            <div id="usersTable"></div>
+          </div>
+          <div style="flex:1">
+            <h4>Solicitudes</h4>
+            <div id="requestsTable"></div>
+          </div>
+        </div>
+
+        <div id="adminMap"></div>
+      </div>
+
+    </div>
   </div>
 
-  <div class="panel" id="trackerPanel" style="display:none;">
-    <h3>Modo Rastreador</h3>
-    <input id="trackCode" placeholder="Código del dispositivo"/>
-    <button id="btnStartTrack">Comenzar Seguimiento</button>
-    <button id="btnStopTrack">Detener</button>
-    <div id="statusTrack"></div>
-    <div id="map"></div>
-  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+  // ========== CONFIG - cambia la URL por la de tu WebApp Apps Script ==========
+  const API_URL = 'https://script.google.com/macros/s/AKfycbxDbHBKjsUpOtKUjGzhXW9Zy6Km0P2Dq7JEGlbsDyGuAClYSRA6x4W2bO_bFR1ONTaMpQ/exec';
+  // ==========================================================================
 
-  <div class="panel" id="devicePanel" style="display:none;">
-    <h3>Modo Dispositivo</h3>
-    <input id="deviceCode" placeholder="Código del dispositivo"/>
-    <button id="btnStartSend">Comenzar Envío</button>
-    <button id="btnStopSend">Detener</button>
-    <div id="statusDevice"></div>
-  </div>
-</div>
+  // ---------- util ----------
+  const qs = id => document.getElementById(id);
+  function show(el){ if(el) el.style.display='block'; }
+  function hide(el){ if(el) el.style.display='none'; }
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbw2XgCXoxi0KkvjKRbuf7B0WXSedkPaEOYJw-roLsNWiJryWKWAAP_bzLAxRL57eX--fg/exec'; // ✅ Web App pública
+  // ---------- session ----------
+  function saveSession(obj){ localStorage.setItem('ub_session', JSON.stringify(obj)); }
+  function loadSession(){ try { return JSON.parse(localStorage.getItem('ub_session')||'null'); } catch(e){return null} }
+  function clearSession(){ localStorage.removeItem('ub_session'); }
 
-// ======================= LOGIN =======================
-document.getElementById('btnLogin').addEventListener('click', async ()=>{
-  const email = document.getElementById('email').value.trim();
-  const password = document.getElementById('password').value.trim();
-  const mode = document.getElementById('mode').value;
-  const msg = document.getElementById('loginMsg');
-
-  if(!email || !password){
-    msg.innerText = '⚠️ Completa los campos.';
-    return;
+  // ---------- password policy (client-side) ----------
+  function passwordValid(p){
+    if(typeof p !== 'string') return false;
+    if(p.length < 8) return false;
+    const upper = p.replace(/[^A-Z]/g,'').length;
+    const lower = p.replace(/[^a-z]/g,'').length;
+    const digits = p.replace(/[^0-9]/g,'').length;
+    const special = p.replace(/[A-Za-z0-9]/g,'').length;
+    return upper >= 2 && lower >= 2 && digits >= 2 && special >= 1;
   }
 
-  msg.innerText = '🔐 Autenticando...';
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ action:'login', email, password })
-    });
-    const data = await res.json();
-
-    if(data.success){
-      msg.innerText = '✅ Bienvenido';
-      document.getElementById('loginPanel').style.display='none';
-      if(mode === 'tracker'){
-        document.getElementById('trackerPanel').style.display='block';
-      } else {
-        document.getElementById('devicePanel').style.display='block';
-      }
-      window.localStorage.setItem('codigo_x', data.codigo_x);
-    } else {
-      msg.innerText = '❌ ' + (data.message || 'Credenciales incorrectas');
-    }
-  } catch(err){
-    msg.innerText = '🚫 Error de conexión';
-    console.error(err);
-  }
-});
-
-// ======================= MAPA (TRACKER) =======================
-let map, marker, trackTimer;
-function initMap(){
-  if(map) return;
-  map = L.map('map').setView([0,0], 2);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-}
-
-document.getElementById('btnStartTrack').addEventListener('click', ()=>{
-  initMap();
-  const code = document.getElementById('trackCode').value.trim();
-  if(!code){ alert('Código requerido'); return; }
-
-  document.getElementById('statusTrack').innerText = '🔍 Iniciando seguimiento...';
-
-  const fetchLocation = async ()=>{
-    try {
-      const res = await fetch(`${API_URL}?codigo_x=${code}`);
-      const data = await res.json();
-
-      if(data.lat && data.lon){
-        const { lat, lon, ultima_actualizacion } = data;
-        if(!marker) marker = L.marker([lat, lon]).addTo(map);
-        else marker.setLatLng([lat, lon]);
-        map.setView([lat, lon], 15);
-        document.getElementById('statusTrack').innerText = 
-          `📍 ${lat.toFixed(5)}, ${lon.toFixed(5)} (${ultima_actualizacion})`;
-      } else {
-        document.getElementById('statusTrack').innerText = '⚠️ No se encontraron coordenadas.';
-      }
-    } catch(err){
-      console.warn('Error obteniendo ubicación:', err);
-      document.getElementById('statusTrack').innerText = '⚠️ Error de conexión.';
-    }
-  };
-
-  fetchLocation(); // primera llamada
-  trackTimer = setInterval(fetchLocation, 10000); // cada 10 seg
-});
-
-document.getElementById('btnStopTrack').addEventListener('click', ()=>{
-  if(trackTimer) clearInterval(trackTimer);
-  document.getElementById('statusTrack').innerText = '🛑 Seguimiento detenido.';
-});
-
-// ======================= MODO DISPOSITIVO =======================
-let watchId = null;
-
-document.getElementById('btnStartSend').addEventListener('click', ()=>{
-  const code = document.getElementById('deviceCode').value.trim();
-  if(!code){ alert('Código requerido'); return; }
-
-  document.getElementById('statusDevice').innerText = '📡 Activando GPS...';
-
-  if(!navigator.geolocation){
-    alert('Tu navegador no soporta geolocalización.');
-    return;
-  }
-
-  // watchPosition actualiza en tiempo real y consume menos
-  watchId = navigator.geolocation.watchPosition(async pos=>{
-    const lat = pos.coords.latitude;
-    const lon = pos.coords.longitude;
+  // ---------- LOGIN ----------
+  qs('btnLogin').addEventListener('click', async ()=>{
+    const user = qs('loginUser').value.trim();
+    const pass = qs('loginPass').value;
+    qs('loginMsg').textContent = 'Iniciando...';
+    if(!user || !pass){ qs('loginMsg').textContent = 'Usuario y contraseña requeridos.'; return; }
 
     try {
       const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'updateLocation', codigo_x: code, lat, lon })
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'login', username: user, password: pass })
       });
       const data = await res.json();
       if(data.success){
-        document.getElementById('statusDevice').innerText = 
-          `📤 ${lat.toFixed(5)}, ${lon.toFixed(5)} — ${new Date().toLocaleTimeString()}`;
+        qs('loginMsg').textContent = '✅ Bienvenido';
+        saveSession({ username: user, codigo_x: data.user.codigo_x, name: data.user.name, is_admin: !!data.user.is_admin });
+        initAfterLogin();
       } else {
-        document.getElementById('statusDevice').innerText = '⚠️ Error al enviar datos.';
+        qs('loginMsg').textContent = '❌ ' + (data.message||'Error');
       }
-    } catch(err){
-      console.error('Error al actualizar ubicación:', err);
-      document.getElementById('statusDevice').innerText = '🚫 Conexión fallida.';
+    } catch(e){
+      qs('loginMsg').textContent = '🚫 Error de conexión';
+      console.error(e);
     }
-  }, 
-  err=>{
-    console.warn('Error de geolocalización:', err);
-    document.getElementById('statusDevice').innerText = '⚠️ Error obteniendo ubicación.';
-  },
-  { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
-});
+  });
 
-document.getElementById('btnStopSend').addEventListener('click', ()=>{
-  if(watchId !== null){
-    navigator.geolocation.clearWatch(watchId);
-    watchId = null;
+  qs('btnLogout').addEventListener('click', ()=>{
+    clearSession();
+    location.reload();
+  });
+
+  // ---------- Solicitud de cuenta (registro público) ----------
+  qs('btnShowReqForm').addEventListener('click', ()=>{ show(qs('requestCard')); });
+  qs('btnHideReq').addEventListener('click', ()=>{ hide(qs('requestCard')); });
+
+  qs('btnSubmitRequest').addEventListener('click', async ()=>{
+    const name = qs('reqName').value.trim();
+    const email = qs('reqEmail').value.trim();
+    const phone = qs('reqPhone').value.trim();
+    const age = parseInt(qs('reqAge').value,10);
+    const sex = qs('reqSex').value;
+    const pass = qs('reqPass').value;
+
+    if(!name || !email || !phone || !age || age < 16 || !sex){ qs('reqMsg').textContent='Completa todos los campos y edad >= 16'; return; }
+    if(!passwordValid(pass)){ qs('reqMsg').textContent='Contraseña no cumple política de seguridad'; return; }
+
+    qs('reqMsg').textContent = 'Enviando solicitud...';
+    try {
+      const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+        action:'createRequest', name, email, phone, age, sex, password: pass
+      })});
+      const data = await res.json();
+      qs('reqMsg').textContent = data.success ? '✅ Solicitud enviada' : '❌ '+(data.message||'Error');
+      if(data.success) { qs('reqName').value=''; qs('reqEmail').value=''; qs('reqPhone').value=''; qs('reqAge').value=''; qs('reqSex').value=''; qs('reqPass').value=''; }
+    } catch(e){ qs('reqMsg').textContent='🚫 Error conexión'; console.error(e); }
+  });
+
+  // ---------- After login UI ----------
+  async function initAfterLogin(){
+    const s = loadSession();
+    if(!s) return;
+    hide(qs('loginCard'));
+    show(qs('btnLogout'));
+    show(qs('mainUI'));
+    qs('userName').textContent = s.name || s.username;
+    qs('userCode').textContent = s.codigo_x || '-';
+    qs('userRole').textContent = s.is_admin ? 'Administrador' : 'Usuario';
+    qs('deviceCode').textContent = s.codigo_x || '-';
+    // show/hide admin
+    if(s.is_admin) show(qs('adminPanel')); else hide(qs('adminPanel'));
+    // prefill pairing if present
+    bindMainActions();
+    if(s.is_admin) { fetchUsers(); fetchRequests(); initAdminMap(); }
   }
-  document.getElementById('statusDevice').innerText = '🛑 Envío detenido.';
-});
-</script>
 
+  // ---------- bind main interactions ----------
+  function bindMainActions(){
+    qs('btnPair').addEventListener('click', async ()=>{
+      const partner = qs('partnerCode').value.trim();
+      const s = loadSession();
+      if(!s){ alert('Sesión inválida'); return; }
+      if(!partner){ qs('pairMsg').textContent = 'Ingresa el código de la pareja'; return; }
+      qs('pairMsg').textContent = 'Emparejando...';
+      try {
+        const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+          action:'pairWith', my_code: s.codigo_x, partner_code: partner
+        })});
+        const data = await res.json();
+        qs('pairMsg').textContent = data.success ? '✅ Emparejado' : '❌ '+(data.message||'Error');
+      } catch(e){ qs('pairMsg').textContent='🚫 Error'; console.error(e); }
+    });
+
+    qs('btnOpenMode').addEventListener('click', ()=>{
+      const mode = qs('modeSelect').value;
+      hide(qs('devicePanel')); hide(qs('trackerPanel'));
+      if(mode === 'device') show(qs('devicePanel'));
+      if(mode === 'tracker') show(qs('trackerPanel'));
+    });
+
+    // Device send
+    let watchId = null;
+    qs('btnStartSend').addEventListener('click', async ()=>{
+      const s = loadSession(); if(!s) return alert('Sesión inválida');
+      if(!navigator.geolocation) return alert('Geolocalización no disponible');
+      qs('statusDevice').textContent = 'Iniciando envío...';
+      // battery helper
+      async function getBattery(){ if('getBattery' in navigator) try { const b = await navigator.getBattery(); return {level: Math.round(b.level*100), charging: b.charging}; } catch(e){return null} return null; }
+
+      watchId = navigator.geolocation.watchPosition(async pos=>{
+        const lat = pos.coords.latitude, lon = pos.coords.longitude, ts = new Date().toISOString();
+        const battery = await getBattery();
+        try {
+          const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+            action:'updateLocation', codigo_x: s.codigo_x, lat, lon, timestamp: ts, battery
+          })});
+          const data = await res.json();
+          if(data.success) qs('statusDevice').textContent = `Enviado ${lat.toFixed(5)},${lon.toFixed(5)} — ${new Date().toLocaleTimeString()} — Batería: ${battery ? battery.level+'%' : 'N/A'}`;
+          else qs('statusDevice').textContent = '⚠️ '+(data.message||'Err');
+        } catch(e){ qs('statusDevice').textContent = '🚫 Error al enviar'; console.error(e); }
+      }, err=>{ qs('statusDevice').textContent = '⚠️ GPS error: ' + err.message; }, { enableHighAccuracy:true, maximumAge:5000, timeout:15000 });
+    });
+
+    qs('btnStopSend').addEventListener('click', ()=>{ navigator.geolocation.clearWatch(watchId); qs('statusDevice').textContent = 'Envío detenido.'; });
+
+    // Tracker
+    let map, marker, trackTimer;
+    function initMap(){ if(map) return (map = L.map('map').setView([0,0],2), L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'&copy; OSM'}).addTo(map), map); }
+    qs('btnStartTrack').addEventListener('click', ()=>{
+      initMap();
+      const code = qs('trackCode').value.trim();
+      if(!code) return alert('Código requerido');
+      qs('statusTrack').textContent = 'Iniciando seguimiento...';
+      async function fetchLocation(){
+        try {
+          const res = await fetch(API_URL + '?codigo_x=' + encodeURIComponent(code));
+          const data = await res.json();
+          if(!data.success){ qs('statusTrack').textContent = '❌ '+(data.message||'No hay datos'); return; }
+          const { lat, lon, updated_at, battery, online, pair_info } = data;
+          if(lat && lon){
+            if(!marker) marker = L.marker([lat, lon]).addTo(map);
+            else marker.setLatLng([lat, lon]);
+            map.setView([lat, lon], 15);
+            const onlineBadge = online ? '<span class="badge online">EN LÍNEA</span>' : '<span class="badge offline">OFFLINE</span>';
+            qs('statusTrack').innerHTML = `${onlineBadge} • ${lat.toFixed(5)}, ${lon.toFixed(5)} • Últ: ${updated_at||'-'} • Batería: ${battery ? battery.level+'%' : 'N/A'}`;
+          } else qs('statusTrack').textContent = 'No hay coordenadas';
+        } catch(e){ qs('statusTrack').textContent='🚫 Error conexión'; console.error(e); }
+      }
+      fetchLocation(); trackTimer = setInterval(fetchLocation, 8000);
+    });
+    qs('btnStopTrack').addEventListener('click', ()=>{ if(trackTimer) clearInterval(trackTimer); qs('statusTrack').textContent='Seguimiento detenido.'; });
+
+    // Admin actions
+    qs('btnRefresh').addEventListener('click', ()=>{ fetchUsers(); fetchRequests(); });
+    qs('btnShowAll').addEventListener('click', showAllMarkers);
+    qs('btnShowRequests').addEventListener('click', ()=>{ fetchRequests(); });
+  }
+
+  // ---------- ADMIN: fetch users & requests ----------
+  async function fetchUsers(){
+    qs('adminMsg').textContent = 'Cargando usuarios...';
+    try {
+      const res = await fetch(API_URL + '?admin_list=true');
+      const data = await res.json();
+      if(!data.success){ qs('adminMsg').textContent = '❌ '+(data.message||''); return; }
+      renderUsersTable(data.users);
+      qs('adminMsg').textContent = 'Usuarios cargados: '+(data.users.length||0);
+    } catch(e){ qs('adminMsg').textContent = '🚫 Error'; console.error(e); }
+  }
+
+  function renderUsersTable(users){
+    const out = document.createElement('div');
+    const table = document.createElement('table'); table.className='tbl';
+    const thead = document.createElement('thead'); thead.innerHTML = '<tr><th>Nombre</th><th>Teléfono</th><th>Código</th><th>Última</th><th>Acciones</th></tr>'; table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    users.forEach(u=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${u.name||''}</td><td>${u.email||u.username||''}</td><td>${u.codigo_x||''}</td><td>${u.last_seen||''}</td>`;
+      const actionsTd = document.createElement('td');
+      const btnEdit = document.createElement('button'); btnEdit.textContent='Editar'; btnEdit.style.marginRight='6px';
+      btnEdit.addEventListener('click', ()=> editUserModal(u));
+      const btnDel = document.createElement('button'); btnDel.textContent='Eliminar'; btnDel.style.background='#b33333';
+      btnDel.addEventListener('click', ()=> deleteUserConfirm(u));
+      actionsTd.appendChild(btnEdit); actionsTd.appendChild(btnDel);
+      tr.appendChild(actionsTd);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody); out.appendChild(table);
+    qs('usersTable').innerHTML=''; qs('usersTable').appendChild(out);
+  }
+
+  // ---------- Requests ----------
+  async function fetchRequests(){
+    try {
+      const res = await fetch(API_URL + '?list_requests=true');
+      const data = await res.json();
+      if(!data.success){ qs('requestsTable').innerHTML = '❌ '+(data.message||''); return; }
+      renderRequests(data.requests||[]);
+    } catch(e){ qs('requestsTable').innerHTML='🚫 Error'; console.error(e); }
+  }
+
+  function renderRequests(reqs){
+    const out = document.createElement('div');
+    if(reqs.length===0){ qs('requestsTable').innerHTML = '<div class="small">No hay solicitudes</div>'; return; }
+    const table = document.createElement('table'); table.className='tbl';
+    table.innerHTML = '<thead><tr><th>Nombre</th><th>Tel</th><th>Email</th><th>Edad/Sexo</th><th>Acciones</th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    reqs.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.name}</td><td>${r.phone}</td><td>${r.email}</td><td>${r.age}/${r.sex}</td>`;
+      const td = document.createElement('td');
+      const btnA = document.createElement('button'); btnA.textContent='Aprobar'; btnA.addEventListener('click', ()=> approveRequest(r));
+      const btnR = document.createElement('button'); btnR.textContent='Rechazar'; btnR.style.background='#b33333'; btnR.addEventListener('click', ()=> rejectRequest(r));
+      td.appendChild(btnA); td.appendChild(btnR); tr.appendChild(td);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody); out.appendChild(table);
+    qs('requestsTable').innerHTML=''; qs('requestsTable').appendChild(out);
+  }
+
+  async function approveRequest(r){
+    if(!confirm('Aprobar solicitud de '+r.name+'?')) return;
+    try {
+      const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+        action:'approveRequest', request_id: r.id
+      })});
+      const data = await res.json();
+      if(data.success){ alert('Aprobado'); fetchUsers(); fetchRequests(); } else alert('Error: '+(data.message||''));
+    } catch(e){ alert('Error'); console.error(e); }
+  }
+  async function rejectRequest(r){
+    if(!confirm('Rechazar solicitud de '+r.name+'?')) return;
+    try {
+      const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+        action:'rejectRequest', request_id: r.id
+      })});
+      const data = await res.json();
+      if(data.success){ alert('Rechazada'); fetchRequests(); } else alert('Error: '+(data.message||''));
+    } catch(e){ alert('Error'); console.error(e); }
+  }
+
+  // ---------- edit/delete user ----------
+  function editUserModal(u){
+    const newName = prompt('Nuevo nombre', u.name||'') || u.name;
+    // para simplicidad solo nombre editable aquí - admin puede extender
+    fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
+      action:'updateUser', codigo_x: u.codigo_x, name: newName
+    })}).then(r=>r.json()).then(d=>{ if(d.success){ alert('Actualizado'); fetchUsers(); } else alert('Error: '+(d.message||'')); }).catch(e=>{alert('Err');console.error(e)});
+  }
+
+  function deleteUserConfirm(u){
+    if(!confirm('Eliminar usuario '+ (u.name||u.email) +' ?')) return;
+    fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'deleteUser', codigo_x: u.codigo_x })})
+      .then(r=>r.json()).then(d=>{ if(d.success){ alert('Eliminado'); fetchUsers(); } else alert('Error: '+(d.message||'')); }).catch(e=>{alert('Err');console.error(e)});
+  }
+
+  // ---------- admin map ----------
+  let adminMap, adminMarkers=[];
+  function initAdminMap(){
+    if(adminMap) return;
+    adminMap = L.map('adminMap').setView([0,0],2);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(adminMap);
+  }
+  async function showAllMarkers(){
+    initAdminMap();
+    // clear
+    adminMarkers.forEach(m=>adminMap.removeLayer(m)); adminMarkers=[];
+    try {
+      const res = await fetch(API_URL + '?admin_list=true'); const data = await res.json();
+      if(!data.success) return;
+      data.users.forEach(u=>{
+        if(u.last_lat && u.last_lon){
+          const m = L.marker([u.last_lat,u.last_lon]).addTo(adminMap);
+          m.bindPopup(`<strong>${u.name||u.email}</strong><br>${u.codigo_x}<br>Últ: ${u.last_seen||''}<br>Batería:${u.last_battery ? u.last_battery.level+'%':''}`);
+          adminMarkers.push(m);
+        }
+      });
+      if(adminMarkers.length) adminMap.setView(adminMarkers[0].getLatLng(), 10);
+    } catch(e){ console.error(e); }
+  }
+
+  // ---------- helper endpoints queries for initial session (if any) ----------
+  (function init(){
+    const s = loadSession();
+    if(s){ initAfterLogin(); } // session persisted
+  })();
+
+  // ========================================================================
+  // Nota: este frontend confía en el backend Apps Script que te doy a continuación.
+  // ========================================================================
+  </script>
 </body>
 </html>
