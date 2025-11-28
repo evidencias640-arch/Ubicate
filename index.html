@@ -847,17 +847,16 @@
         try {
           // Usamos 'cors' para leer la respuesta del Apps Script
           const response = await fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    mode: 'no-cors',   // ← LA CLAVE
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-        action: 'updatePhotoDate',
-        id: idParticipante,
-        sheet: hojaReal,
-        newDate: nuevaFechaStr
-    })
-});
-
+              method: 'POST',
+              mode: 'cors', 
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                  action: 'updatePhotoDate',
+                  id: idParticipante,
+                  sheet: nombreTutora,
+                  newDate: nuevaFechaStr // YYYY-MM-DD
+              }).toString()
+          });
           
           const resultText = await response.text();
 
