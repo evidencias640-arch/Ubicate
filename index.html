@@ -1,498 +1,927 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <title>Ubicate — Sistema Parejas (Login + Admin)</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Seguimiento Fotográfico 678</title>
+  <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/685/685655.png" type="image/png">
   <style>
-    /* Estilo simple y responsivo */
-    :root{--bg:#f4f6f8;--card:#fff;--accent:#1867c0}
-    body{margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:var(--bg);color:#111;padding:12px}
-    .container{max-width:1100px;margin:0 auto}
-    .card{background:var(--card);padding:12px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.06);margin-bottom:12px}
-    h2,h3{margin:6px 0}
-    label{display:block;font-weight:600;margin-bottom:6px}
-    input,select,button,textarea{padding:8px;border-radius:8px;border:1px solid #d0d7de;width:100%;box-sizing:border-box}
-    .row{display:flex;gap:10px;flex-wrap:wrap}
-    .col{flex:1;min-width:180px}
-    .two{width:calc(50% - 8px)}
-    @media(max-width:720px){.two{width:100%}}
-    button{cursor:pointer;background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:8px}
-    button.ghost{background:#fff;color:var(--accent);border:1px solid #dbe7f5}
-    .small{font-size:0.9rem;color:#444}
-    #map,#adminMap{height:60vh;border-radius:8px;margin-top:8px}
-    .tbl{width:100%;border-collapse:collapse}
-    .tbl th, .tbl td{padding:8px;border-bottom:1px solid #eee;text-align:left}
-    .badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:0.85rem}
-    .online{background:#e6ffed;color:#0a7a2a}
-    .offline{background:#fff0f0;color:#9b1c1c}
+    :root {
+      --primary: #667eea;
+      --primary-dark: #764ba2;
+      --secondary: #f093fb;
+      --accent: #4facfe;
+      --success: #00f2fe;
+      --warning: #ffb347;
+      --danger: #ff6b6b;
+      --dark: #1a1a2e;
+      --darker: #16213e;
+      --light: #e94560;
+      --text: #ffffff;
+      --text-muted: #b8c6db;
+      --glass: rgba(255, 255, 255, 0.1);
+      --glass-border: rgba(255, 255, 255, 0.2);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 50%, var(--dark) 100%);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .background-pattern {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0.05;
+      background-image: 
+        radial-gradient(circle at 20% 50%, white 2px, transparent 2px),
+        radial-gradient(circle at 80% 20%, white 2px, transparent 2px),
+        radial-gradient(circle at 40% 80%, white 2px, transparent 2px);
+      background-size: 100px 100px, 150px 150px, 120px 120px;
+      z-index: -1;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 3rem;
+      animation: fadeInDown 1s ease-out;
+    }
+
+    .header h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: black;
+      background-clip: text;
+      margin-bottom: 1rem;
+      text-shadow: 0 0 30px rgba(79, 172, 254, 0.3);
+    }
+
+    .subtitle {
+      font-size: 1.2rem;
+      -webkit-text-fill-color: black;
+      color: var(--text-muted);
+      margin-bottom: 2rem;
+    }
+
+    .info-banner {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      text-align: center;
+      animation: slideInUp 1s ease-out 0.3s both;
+    }
+
+    .info-banner h3 {
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+      font-size: 1.3rem;
+    }
+
+    .info-banner p {
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      animation: slideInLeft 1s ease-out 0.5s both;
+    }
+
+    .select-wrapper {
+      position: relative;
+    }
+
+    .select-wrapper::after {
+      content: '▼';
+      position: absolute;
+      right: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--accent);
+      pointer-events: none;
+    }
+
+    select {
+      width: 100%;
+      padding: 15px 45px 15px 20px;
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 2px solid var(--glass-border);
+      border-radius: 15px;
+      color: var(--text);
+      font-size: 1rem;
+      appearance: none;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      
+      /* --- CORRECCIÓN PARA VISUALIZACIÓN DE LA LISTA DE TUTORAS --- */
+      /* Asegura que el texto y los emojis se vean correctamente al seleccionar */
+      line-height: 1.2; 
+      /* --- FIN CORRECCIÓN --- */
+    }
+    
+    /* --- ESTILO ADICIONAL PARA LAS OPCIONES DE SELECT --- */
+    /* Aunque el estilo de las opciones es limitado por el navegador,
+       este asegura que el color de texto sea oscuro en la lista */
+    select option {
+        color: var(--dark);
+        background: var(--glass); /* Fondo en el desplegable */
+    }
+    /* --- FIN ESTILO ADICIONAL --- */
+
+
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 20px rgba(79, 172, 254, 0.3);
+    }
+
+    .refresh-btn {
+      padding: 15px 25px;
+      background: linear-gradient(135deg, var(--accent), var(--secondary));
+      border: none;
+      border-radius: 15px;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 8px 20px rgba(79, 172, 254, 0.3);
+      -webkit-text-fill-color: black;
+    }
+
+    .refresh-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 25px rgba(79, 172, 254, 0.4);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      text-align: center;
+      transition: all 0.3s ease;
+      animation: fadeInUp 1s ease-out;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+    }
+
+    .stat-number {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .stat-ok .stat-number { color: var(--success); }
+    .stat-pronto .stat-number { color: var(--warning); }
+    .stat-vencido .stat-number { color: var(--danger); }
+
+    .notifications {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+      animation: slideInRight 1s ease-out 0.7s both;
+    }
+
+    .notifications h3 {
+      color: var(--accent);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .notification-item {
+      background: rgba(255, 107, 107, 0.1);
+      border-left: 4px solid var(--danger);
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+      border-radius: 0 10px 10px 0;
+      animation: pulse 2s infinite;
+    }
+
+    .notification-item.warning {
+      background: rgba(255, 179, 71, 0.1);
+      border-left-color: var(--warning);
+    }
+
+    .section-title {
+      font-size: 1.8rem;
+      color: var(--accent);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      gap: 1.5rem;
+      margin-top: 2rem;
+    }
+
+    .card {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      animation: fadeInUp 0.6s ease-out;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+    }
+
+    .card.ok::before { background: var(--success); }
+    .card.pronto::before { background: var(--warning); }
+    .card.vencido::before { background: var(--danger); }
+
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+    }
+
+    .card-content {
+      display: grid;
+      gap: 0.8rem;
+    }
+
+    .card-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.3rem 0;
+    }
+
+    .label {
+      font-weight: 600;
+      color: var(--accent);
+      font-size: 0.9rem;
+    }
+
+    .value {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .status-badge {
+      padding: 0.4rem 1rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .ok { 
+      background: rgba(0, 242, 254, 0.2); 
+      color: var(--success);
+      border: 1px solid var(--success);
+    }
+    
+    .pronto { 
+      background: rgba(255, 164, 37, 0.418); 
+      color: var(--warning);
+      border: 1px solid var(--warning);
+    }
+    
+    .vencido { 
+      background: rgba(255, 0, 0, 0.342); 
+      color: var(--danger);
+      border: 1px solid var(--danger);
+      animation: pulse 2s infinite;
+    }
+
+    /* --- NUEVOS ESTILOS PARA BOTONES DE ACTUALIZACIÓN --- */
+    .update-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      padding-top: 10px;
+      border-top: 1px solid var(--glass-border);
+      justify-content: center;
+    }
+
+    .update-btn {
+      padding: 8px 15px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.3s ease, transform 0.3s ease;
+      font-size: 0.9rem;
+      text-align: center; /* Asegura que el texto esté centrado en el botón */
+    }
+
+    .update-btn-today {
+      background: var(--success);
+      color: var(--dark);
+      box-shadow: 0 4px 10px rgba(0, 242, 254, 0.3);
+    }
+    
+    .update-btn-today:hover {
+      background: #00e0ef;
+      transform: translateY(-2px);
+    }
+
+    .update-btn-date {
+      background: var(--warning);
+      color: var(--dark);
+      box-shadow: 0 4px 10px rgba(255, 179, 71, 0.3);
+    }
+
+    .update-btn-date:hover {
+      background: #ffc46a;
+      transform: translateY(-2px);
+    }
+    
+    .date-input {
+      /* Ocultamos el input de fecha, pero activamos el selector al hacer clic en el label */
+      opacity: 0; 
+      width: 0;
+      height: 0;
+      position: absolute;
+      pointer-events: none;
+    }
+    /* --- FIN NUEVOS ESTILOS --- */
+
+
+    .loading {
+      text-align: center;
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      padding: 2rem;
+      animation: pulse 1.5s infinite;
+    }
+
+    .error {
+      text-align: center;
+      color: var(--danger);
+      background: rgba(255, 107, 107, 0.1);
+      padding: 2rem;
+      border-radius: 15px;
+      border: 1px solid var(--danger);
+    }
+
+    .collapsible-header {
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .collapsible-header:hover {
+      color: var(--secondary);
+      transform: translateX(5px);
+    }
+
+    .toggle-icon {
+      transition: transform 0.3s ease;
+      font-size: 0.8em;
+    }
+
+    .toggle-icon.rotated {
+      transform: rotate(180deg);
+    }
+
+    .collapsible-content {
+      max-height: 1000px;
+      overflow: hidden;
+      transition: max-height 0.4s ease-out, opacity 0.3s ease;
+      opacity: 1;
+    }
+
+    .collapsible-content.collapsed {
+      max-height: 0;
+      opacity: 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-muted);
+    }
+
+    .empty-state h3 {
+      margin-bottom: 1rem;
+      color: var(--accent);
+    }
+
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideInUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-30px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(30px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    @media (max-width: 768px) {
+      .container { padding: 15px; }
+      
+      .controls {
+        grid-template-columns: 1fr;
+      }
+      
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+      }
+      
+      .cards-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .card-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.3rem;
+      }
+      
+      .header h1 {
+        font-size: 2rem;
+      }
+      
+      /* Ajuste para que los botones de actualización quepan mejor en móvil */
+      .update-buttons {
+          flex-direction: column;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .stat-card {
+        padding: 1rem;
+      }
+      
+      .card {
+        padding: 1rem;
+      }
+    }
   </style>
 </head>
 <body>
+  <div class="background-pattern"></div>
+  
   <div class="container">
-
-    <div class="card">
-      <h2>Ubicate — Sistema Parejas</h2>
-      <p class="small">Inicia sesión con tu número (usuario) y contraseña. Si eres administrador tendrás acceso al panel completo.</p>
+    <div class="header">
+      <h1>📸 Seguimiento Fotográfico 678</h1>
+      <p class="subtitle">Sistema de Control y Monitoreo de Actualizaciones</p>
     </div>
 
-    <!-- LOGIN -->
-    <div class="card" id="loginCard">
-      <h3>Iniciar Sesión</h3>
-      <div class="row">
-        <div class="col">
-          <label>Número de teléfono (usuario)</label>
-          <input id="loginUser" placeholder="Ej. 3123456789" />
-        </div>
-        <div class="col">
-          <label>Contraseña</label>
-          <input id="loginPass" type="password" />
-        </div>
-      </div>
-      <div style="margin-top:8px;display:flex;gap:8px">
-        <button id="btnLogin">Entrar</button>
-        <button class="ghost" id="btnShowReqForm">Solicitar cuenta</button>
-        <button class="ghost" id="btnLogout" style="display:none">Cerrar sesión</button>
-      </div>
-      <div id="loginMsg" class="small" style="margin-top:8px"></div>
+    <div class="info-banner">
+      <h3>🔄 Información Importante</h3>
+      <p>Las fotografías deben actualizarse cada <strong>18 meses</strong> para mantener el seguimiento adecuado de los beneficiarios del programa.</p>
     </div>
 
-    <!-- REQUEST FORM (registro como solicitud) -->
-    <div class="card" id="requestCard" style="display:none">
-      <h3>Solicitar cuenta (se revisa por admin)</h3>
-      <div class="row">
-        <div class="col">
-          <label>Nombre</label><input id="reqName" />
-        </div>
-        <div class="col">
-          <label>Correo</label><input id="reqEmail" />
-        </div>
-        <div class="col">
-          <label>Teléfono (usuario)</label><input id="reqPhone" />
-        </div>
-        <div class="col">
-          <label>Edad</label><input id="reqAge" type="number" min="16" />
-        </div>
-        <div class="col">
-          <label>Sexo</label>
-          <select id="reqSex"><option value="">Selecciona</option><option>F</option><option>M</option><option>Otro</option></select>
-        </div>
-        <div class="col">
-          <label>Contraseña</label><input id="reqPass" type="password" />
-          <div class="small">Mín: 8 chars, ≥2 mayus, ≥2 minis, ≥2 números, ≥1 especial</div>
-        </div>
+    <div class="controls">
+      <div class="select-wrapper">
+        <select id="seleccionTutora">
+          <option value="">Seleccione una tutora...</option>
+          <option value="Lisbeth">👩‍🏫 Yrany Lisbeth Martinez</option> 
+          <option value="Diana">👩‍🏫 Diana Carolina Ureña Mendoza</option>
+          <option value="Juliana">👩‍🏫 Juliana Villamizar Ortiz</option>
+          <option value="Helen">👩‍🏫 Helen Abelyn Sanchez Herrera</option>
+        </select>
       </div>
-      <div style="margin-top:8px;display:flex;gap:8px">
-        <button id="btnSubmitRequest">Enviar Solicitud</button>
-        <button id="btnHideReq" class="ghost">Cancelar</button>
-      </div>
-      <div id="reqMsg" class="small" style="margin-top:8px"></div>
+      <button class="refresh-btn" id="refreshBtn">🔄 Actualizar</button>
     </div>
 
-    <!-- MAIN INTERFACE (visible después de login) -->
-    <div id="mainUI" style="display:none">
-      <div class="card">
-        <h3>Bienvenido <span id="userName"></span> — Código: <span id="userCode"></span></h3>
-        <div class="small">Tu sesión: <span id="userRole"></span></div>
+    <div class="stats-grid" id="statsGrid" style="display: none;">
+      <div class="stat-card stat-ok">
+        <div class="stat-number" id="statOk">0</div>
+        <div class="stat-label">Al día</div>
       </div>
-
-      <!-- Emparejar -->
-      <div class="card">
-        <h3>Emparejar con pareja</h3>
-        <div class="row">
-          <div class="two">
-            <label>Código de tu pareja</label>
-            <input id="partnerCode" placeholder="Pega el código de la pareja" />
-          </div>
-          <div class="two" style="align-self:end">
-            <button id="btnPair">Emparejar</button>
-          </div>
-        </div>
-        <div id="pairMsg" class="small" style="margin-top:8px"></div>
+      <div class="stat-card stat-pronto">
+        <div class="stat-number" id="statProximo">0</div>
+        <div class="stat-label">Próximos a vencer</div>
       </div>
-
-      <!-- Selección de modo -->
-      <div class="card">
-        <h3>Modos</h3>
-        <div class="row">
-          <select id="modeSelect" style="max-width:320px">
-            <option value="tracker">Rastreador (ver pareja)</option>
-            <option value="device">Dispositivo (enviar ubicación)</option>
-          </select>
-          <div style="flex:1"></div>
-          <button id="btnOpenMode">Abrir</button>
-        </div>
+      <div class="stat-card stat-vencido">
+        <div class="stat-number" id="statVencido">0</div>
+        <div class="stat-label">Vencidos</div>
       </div>
-
-      <!-- DEVICE -->
-      <div id="devicePanel" class="card" style="display:none">
-        <h3>Modo Dispositivo (enviar ubicación)</h3>
-        <div class="small">Tu código: <strong id="deviceCode"></strong></div>
-        <div style="margin-top:8px;display:flex;gap:8px">
-          <button id="btnStartSend">Iniciar envío (background)</button>
-          <button class="ghost" id="btnStopSend">Detener envío</button>
-        </div>
-        <div id="statusDevice" class="small" style="margin-top:8px"></div>
+      <div class="stat-card">
+        <div class="stat-number" id="statTotal">0</div>
+        <div class="stat-label">Total</div>
       </div>
+    </div>
 
-      <!-- TRACKER -->
-      <div id="trackerPanel" class="card" style="display:none">
-        <h3>Modo Rastreador</h3>
-        <div class="small">Código a seguir (tu pareja):</div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <input id="trackCode" placeholder="Código pareja" />
-          <button id="btnStartTrack">Comenzar</button>
-          <button class="ghost" id="btnStopTrack">Detener</button>
-        </div>
-        <div id="statusTrack" class="small" style="margin-top:8px"></div>
-        <div id="map"></div>
+    <div class="notifications" id="notifications" style="display: none;">
+      <h3 class="collapsible-header" onclick="toggleSection('notificationsList')">
+        🚨 Notificaciones Urgentes <span class="toggle-icon">▼</span>
+      </h3>
+      <div id="notificationsList" class="collapsible-content"></div>
+    </div>
+
+    <h2 class="section-title" id="participantesTitle" style="margin-top: 3rem; display: none;">👩🏻🧒🏻👶🏻 PARTICIPANTES</h2> 
+
+    <div id="contenedor" style="display;">
+      <div class="empty-state">
+        <h3>👆 Selecciona una tutora</h3>
+        <p>Elige una tutora del menú desplegable para ver el seguimiento de sus beneficiarios</p>
       </div>
-
-      <!-- ADMIN -->
-      <div id="adminPanel" class="card" style="display:none">
-        <h3>ADMIN — Dashboard</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <button id="btnRefresh">Refrescar datos</button>
-          <button id="btnShowAll">Mostrar todas ubicaciones</button>
-          <button id="btnShowRequests">Solicitudes pendientes</button>
-        </div>
-        <div id="adminMsg" class="small" style="margin-top:8px"></div>
-
-        <div style="display:flex;gap:12px;margin-top:12px">
-          <div style="flex:1">
-            <h4>Usuarios</h4>
-            <div id="usersTable"></div>
-          </div>
-          <div style="flex:1">
-            <h4>Solicitudes</h4>
-            <div id="requestsTable"></div>
-          </div>
-        </div>
-
-        <div id="adminMap"></div>
-      </div>
-
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/modulos/animaciones.js"></script>
   <script>
-  // ========== CONFIG - cambia la URL por la de tu WebApp Apps Script ==========
-  const API_URL = 'https://script.google.com/macros/s/AKfycbxDbHBKjsUpOtKUjGzhXW9Zy6Km0P2Dq7JEGlbsDyGuAClYSRA6x4W2bO_bFR1ONTaMpQ/exec';
-  // ==========================================================================
+    const sheetBase = 'https://docs.google.com/spreadsheets/d/1WcYrZaDFjst7FW93FGS3B6FTDMl0QP17/gviz/tq?tqx=out:json&sheet=';
 
-  // ---------- util ----------
-  const qs = id => document.getElementById(id);
-  function show(el){ if(el) el.style.display='block'; }
-  function hide(el){ if(el) el.style.display='none'; }
+    const contenedor = document.getElementById('contenedor');
+    const selectTutora = document.getElementById('seleccionTutora');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const statsGrid = document.getElementById('statsGrid');
+    const notifications = document.getElementById('notifications');
+    const participantesTitle = document.getElementById('participantesTitle'); 
 
-  // ---------- session ----------
-  function saveSession(obj){ localStorage.setItem('ub_session', JSON.stringify(obj)); }
-  function loadSession(){ try { return JSON.parse(localStorage.getItem('ub_session')||'null'); } catch(e){return null} }
-  function clearSession(){ localStorage.removeItem('ub_session'); }
+    let currentData = [];
+    
+    // URL de tu Apps Script (DEBES REEMPLAZAR CON TU PROPIA URL DESPLEGADA)
+    const APPS_SCRIPT_URL = 'URL_DE_TU_APPS_SCRIPT_AQUI'; 
 
-  // ---------- password policy (client-side) ----------
-  function passwordValid(p){
-    if(typeof p !== 'string') return false;
-    if(p.length < 8) return false;
-    const upper = p.replace(/[^A-Z]/g,'').length;
-    const lower = p.replace(/[^a-z]/g,'').length;
-    const digits = p.replace(/[^0-9]/g,'').length;
-    const special = p.replace(/[A-Za-z0-9]/g,'').length;
-    return upper >= 2 && lower >= 2 && digits >= 2 && special >= 1;
-  }
-
-  // ---------- LOGIN ----------
-  qs('btnLogin').addEventListener('click', async ()=>{
-    const user = qs('loginUser').value.trim();
-    const pass = qs('loginPass').value;
-    qs('loginMsg').textContent = 'Iniciando...';
-    if(!user || !pass){ qs('loginMsg').textContent = 'Usuario y contraseña requeridos.'; return; }
-
-    try {
-      const res = await fetch(API_URL, {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'login', username: user, password: pass })
-      });
-      const data = await res.json();
-      if(data.success){
-        qs('loginMsg').textContent = '✅ Bienvenido';
-        saveSession({ username: user, codigo_x: data.user.codigo_x, name: data.user.name, is_admin: !!data.user.is_admin });
-        initAfterLogin();
-      } else {
-        qs('loginMsg').textContent = '❌ ' + (data.message||'Error');
-      }
-    } catch(e){
-      qs('loginMsg').textContent = '🚫 Error de conexión';
-      console.error(e);
+    function parseDate(val) {
+      if (typeof val !== 'string') return null;
+      const m = val.match(/Date\((\d+),(\d+),(\d+)\)/);
+      if (m) return new Date(+m[1], +m[2], +m[3]);
+      const parts = val.split('/');
+      if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]);
+      return null;
     }
-  });
 
-  qs('btnLogout').addEventListener('click', ()=>{
-    clearSession();
-    location.reload();
-  });
+    function addMonths(date, n) {
+      const d = new Date(date);
+      d.setMonth(d.getMonth() + n);
+      return d;
+    }
 
-  // ---------- Solicitud de cuenta (registro público) ----------
-  qs('btnShowReqForm').addEventListener('click', ()=>{ show(qs('requestCard')); });
-  qs('btnHideReq').addEventListener('click', ()=>{ hide(qs('requestCard')); });
+    function formatDate(d) {
+      return d.toLocaleDateString('es-CO');
+    }
 
-  qs('btnSubmitRequest').addEventListener('click', async ()=>{
-    const name = qs('reqName').value.trim();
-    const email = qs('reqEmail').value.trim();
-    const phone = qs('reqPhone').value.trim();
-    const age = parseInt(qs('reqAge').value,10);
-    const sex = qs('reqSex').value;
-    const pass = qs('reqPass').value;
+    function diasRestantes(f) {
+      return Math.ceil((f - new Date()) / (1000 * 60 * 60 * 24));
+    }
 
-    if(!name || !email || !phone || !age || age < 16 || !sex){ qs('reqMsg').textContent='Completa todos los campos y edad >= 16'; return; }
-    if(!passwordValid(pass)){ qs('reqMsg').textContent='Contraseña no cumple política de seguridad'; return; }
+    function estadoClase(d) {
+      if (d < 0) return 'vencido';
+      if (d <= 30) return 'pronto';
+      return 'ok';
+    }
 
-    qs('reqMsg').textContent = 'Enviando solicitud...';
-    try {
-      const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-        action:'createRequest', name, email, phone, age, sex, password: pass
-      })});
-      const data = await res.json();
-      qs('reqMsg').textContent = data.success ? '✅ Solicitud enviada' : '❌ '+(data.message||'Error');
-      if(data.success) { qs('reqName').value=''; qs('reqEmail').value=''; qs('reqPhone').value=''; qs('reqAge').value=''; qs('reqSex').value=''; qs('reqPass').value=''; }
-    } catch(e){ qs('reqMsg').textContent='🚫 Error conexión'; console.error(e); }
-  });
+    function updateStats(registros) {
+      const stats = {
+        ok: registros.filter(r => estadoClase(r.dias) === 'ok').length,
+        pronto: registros.filter(r => estadoClase(r.dias) === 'pronto').length,
+        vencido: registros.filter(r => estadoClase(r.dias) === 'vencido').length,
+        total: registros.length
+      };
 
-  // ---------- After login UI ----------
-  async function initAfterLogin(){
-    const s = loadSession();
-    if(!s) return;
-    hide(qs('loginCard'));
-    show(qs('btnLogout'));
-    show(qs('mainUI'));
-    qs('userName').textContent = s.name || s.username;
-    qs('userCode').textContent = s.codigo_x || '-';
-    qs('userRole').textContent = s.is_admin ? 'Administrador' : 'Usuario';
-    qs('deviceCode').textContent = s.codigo_x || '-';
-    // show/hide admin
-    if(s.is_admin) show(qs('adminPanel')); else hide(qs('adminPanel'));
-    // prefill pairing if present
-    bindMainActions();
-    if(s.is_admin) { fetchUsers(); fetchRequests(); initAdminMap(); }
-  }
+      document.getElementById('statOk').textContent = stats.ok;
+      document.getElementById('statProximo').textContent = stats.pronto;
+      document.getElementById('statVencido').textContent = stats.vencido;
+      document.getElementById('statTotal').textContent = stats.total;
 
-  // ---------- bind main interactions ----------
-  function bindMainActions(){
-    qs('btnPair').addEventListener('click', async ()=>{
-      const partner = qs('partnerCode').value.trim();
-      const s = loadSession();
-      if(!s){ alert('Sesión inválida'); return; }
-      if(!partner){ qs('pairMsg').textContent = 'Ingresa el código de la pareja'; return; }
-      qs('pairMsg').textContent = 'Emparejando...';
-      try {
-        const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-          action:'pairWith', my_code: s.codigo_x, partner_code: partner
-        })});
-        const data = await res.json();
-        qs('pairMsg').textContent = data.success ? '✅ Emparejado' : '❌ '+(data.message||'Error');
-      } catch(e){ qs('pairMsg').textContent='🚫 Error'; console.error(e); }
-    });
+      statsGrid.style.display = 'grid';
+    }
 
-    qs('btnOpenMode').addEventListener('click', ()=>{
-      const mode = qs('modeSelect').value;
-      hide(qs('devicePanel')); hide(qs('trackerPanel'));
-      if(mode === 'device') show(qs('devicePanel'));
-      if(mode === 'tracker') show(qs('trackerPanel'));
-    });
+    function showNotifications(registros) {
+      const urgentes = registros.filter(r => r.dias < 0);
+      const proximos = registros.filter(r => r.dias >= 0 && r.dias <= 15);
+      
+      const notificationsList = document.getElementById('notificationsList');
+      notificationsList.innerHTML = '';
 
-    // Device send
-    let watchId = null;
-    qs('btnStartSend').addEventListener('click', async ()=>{
-      const s = loadSession(); if(!s) return alert('Sesión inválida');
-      if(!navigator.geolocation) return alert('Geolocalización no disponible');
-      qs('statusDevice').textContent = 'Iniciando envío...';
-      // battery helper
-      async function getBattery(){ if('getBattery' in navigator) try { const b = await navigator.getBattery(); return {level: Math.round(b.level*100), charging: b.charging}; } catch(e){return null} return null; }
-
-      watchId = navigator.geolocation.watchPosition(async pos=>{
-        const lat = pos.coords.latitude, lon = pos.coords.longitude, ts = new Date().toISOString();
-        const battery = await getBattery();
-        try {
-          const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-            action:'updateLocation', codigo_x: s.codigo_x, lat, lon, timestamp: ts, battery
-          })});
-          const data = await res.json();
-          if(data.success) qs('statusDevice').textContent = `Enviado ${lat.toFixed(5)},${lon.toFixed(5)} — ${new Date().toLocaleTimeString()} — Batería: ${battery ? battery.level+'%' : 'N/A'}`;
-          else qs('statusDevice').textContent = '⚠️ '+(data.message||'Err');
-        } catch(e){ qs('statusDevice').textContent = '🚫 Error al enviar'; console.error(e); }
-      }, err=>{ qs('statusDevice').textContent = '⚠️ GPS error: ' + err.message; }, { enableHighAccuracy:true, maximumAge:5000, timeout:15000 });
-    });
-
-    qs('btnStopSend').addEventListener('click', ()=>{ navigator.geolocation.clearWatch(watchId); qs('statusDevice').textContent = 'Envío detenido.'; });
-
-    // Tracker
-    let map, marker, trackTimer;
-    function initMap(){ if(map) return (map = L.map('map').setView([0,0],2), L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'&copy; OSM'}).addTo(map), map); }
-    qs('btnStartTrack').addEventListener('click', ()=>{
-      initMap();
-      const code = qs('trackCode').value.trim();
-      if(!code) return alert('Código requerido');
-      qs('statusTrack').textContent = 'Iniciando seguimiento...';
-      async function fetchLocation(){
-        try {
-          const res = await fetch(API_URL + '?codigo_x=' + encodeURIComponent(code));
-          const data = await res.json();
-          if(!data.success){ qs('statusTrack').textContent = '❌ '+(data.message||'No hay datos'); return; }
-          const { lat, lon, updated_at, battery, online, pair_info } = data;
-          if(lat && lon){
-            if(!marker) marker = L.marker([lat, lon]).addTo(map);
-            else marker.setLatLng([lat, lon]);
-            map.setView([lat, lon], 15);
-            const onlineBadge = online ? '<span class="badge online">EN LÍNEA</span>' : '<span class="badge offline">OFFLINE</span>';
-            qs('statusTrack').innerHTML = `${onlineBadge} • ${lat.toFixed(5)}, ${lon.toFixed(5)} • Últ: ${updated_at||'-'} • Batería: ${battery ? battery.level+'%' : 'N/A'}`;
-          } else qs('statusTrack').textContent = 'No hay coordenadas';
-        } catch(e){ qs('statusTrack').textContent='🚫 Error conexión'; console.error(e); }
+      if (urgentes.length === 0 && proximos.length === 0) {
+        notifications.style.display = 'none';
+        return;
       }
-      fetchLocation(); trackTimer = setInterval(fetchLocation, 8000);
-    });
-    qs('btnStopTrack').addEventListener('click', ()=>{ if(trackTimer) clearInterval(trackTimer); qs('statusTrack').textContent='Seguimiento detenido.'; });
 
-    // Admin actions
-    qs('btnRefresh').addEventListener('click', ()=>{ fetchUsers(); fetchRequests(); });
-    qs('btnShowAll').addEventListener('click', showAllMarkers);
-    qs('btnShowRequests').addEventListener('click', ()=>{ fetchRequests(); });
-  }
-
-  // ---------- ADMIN: fetch users & requests ----------
-  async function fetchUsers(){
-    qs('adminMsg').textContent = 'Cargando usuarios...';
-    try {
-      const res = await fetch(API_URL + '?admin_list=true');
-      const data = await res.json();
-      if(!data.success){ qs('adminMsg').textContent = '❌ '+(data.message||''); return; }
-      renderUsersTable(data.users);
-      qs('adminMsg').textContent = 'Usuarios cargados: '+(data.users.length||0);
-    } catch(e){ qs('adminMsg').textContent = '🚫 Error'; console.error(e); }
-  }
-
-  function renderUsersTable(users){
-    const out = document.createElement('div');
-    const table = document.createElement('table'); table.className='tbl';
-    const thead = document.createElement('thead'); thead.innerHTML = '<tr><th>Nombre</th><th>Teléfono</th><th>Código</th><th>Última</th><th>Acciones</th></tr>'; table.appendChild(thead);
-    const tbody = document.createElement('tbody');
-    users.forEach(u=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${u.name||''}</td><td>${u.email||u.username||''}</td><td>${u.codigo_x||''}</td><td>${u.last_seen||''}</td>`;
-      const actionsTd = document.createElement('td');
-      const btnEdit = document.createElement('button'); btnEdit.textContent='Editar'; btnEdit.style.marginRight='6px';
-      btnEdit.addEventListener('click', ()=> editUserModal(u));
-      const btnDel = document.createElement('button'); btnDel.textContent='Eliminar'; btnDel.style.background='#b33333';
-      btnDel.addEventListener('click', ()=> deleteUserConfirm(u));
-      actionsTd.appendChild(btnEdit); actionsTd.appendChild(btnDel);
-      tr.appendChild(actionsTd);
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody); out.appendChild(table);
-    qs('usersTable').innerHTML=''; qs('usersTable').appendChild(out);
-  }
-
-  // ---------- Requests ----------
-  async function fetchRequests(){
-    try {
-      const res = await fetch(API_URL + '?list_requests=true');
-      const data = await res.json();
-      if(!data.success){ qs('requestsTable').innerHTML = '❌ '+(data.message||''); return; }
-      renderRequests(data.requests||[]);
-    } catch(e){ qs('requestsTable').innerHTML='🚫 Error'; console.error(e); }
-  }
-
-  function renderRequests(reqs){
-    const out = document.createElement('div');
-    if(reqs.length===0){ qs('requestsTable').innerHTML = '<div class="small">No hay solicitudes</div>'; return; }
-    const table = document.createElement('table'); table.className='tbl';
-    table.innerHTML = '<thead><tr><th>Nombre</th><th>Tel</th><th>Email</th><th>Edad/Sexo</th><th>Acciones</th></tr></thead>';
-    const tbody = document.createElement('tbody');
-    reqs.forEach(r=>{
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${r.name}</td><td>${r.phone}</td><td>${r.email}</td><td>${r.age}/${r.sex}</td>`;
-      const td = document.createElement('td');
-      const btnA = document.createElement('button'); btnA.textContent='Aprobar'; btnA.addEventListener('click', ()=> approveRequest(r));
-      const btnR = document.createElement('button'); btnR.textContent='Rechazar'; btnR.style.background='#b33333'; btnR.addEventListener('click', ()=> rejectRequest(r));
-      td.appendChild(btnA); td.appendChild(btnR); tr.appendChild(td);
-      tbody.appendChild(tr);
-    });
-    table.appendChild(tbody); out.appendChild(table);
-    qs('requestsTable').innerHTML=''; qs('requestsTable').appendChild(out);
-  }
-
-  async function approveRequest(r){
-    if(!confirm('Aprobar solicitud de '+r.name+'?')) return;
-    try {
-      const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-        action:'approveRequest', request_id: r.id
-      })});
-      const data = await res.json();
-      if(data.success){ alert('Aprobado'); fetchUsers(); fetchRequests(); } else alert('Error: '+(data.message||''));
-    } catch(e){ alert('Error'); console.error(e); }
-  }
-  async function rejectRequest(r){
-    if(!confirm('Rechazar solicitud de '+r.name+'?')) return;
-    try {
-      const res = await fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-        action:'rejectRequest', request_id: r.id
-      })});
-      const data = await res.json();
-      if(data.success){ alert('Rechazada'); fetchRequests(); } else alert('Error: '+(data.message||''));
-    } catch(e){ alert('Error'); console.error(e); }
-  }
-
-  // ---------- edit/delete user ----------
-  function editUserModal(u){
-    const newName = prompt('Nuevo nombre', u.name||'') || u.name;
-    // para simplicidad solo nombre editable aquí - admin puede extender
-    fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-      action:'updateUser', codigo_x: u.codigo_x, name: newName
-    })}).then(r=>r.json()).then(d=>{ if(d.success){ alert('Actualizado'); fetchUsers(); } else alert('Error: '+(d.message||'')); }).catch(e=>{alert('Err');console.error(e)});
-  }
-
-  function deleteUserConfirm(u){
-    if(!confirm('Eliminar usuario '+ (u.name||u.email) +' ?')) return;
-    fetch(API_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'deleteUser', codigo_x: u.codigo_x })})
-      .then(r=>r.json()).then(d=>{ if(d.success){ alert('Eliminado'); fetchUsers(); } else alert('Error: '+(d.message||'')); }).catch(e=>{alert('Err');console.error(e)});
-  }
-
-  // ---------- admin map ----------
-  let adminMap, adminMarkers=[];
-  function initAdminMap(){
-    if(adminMap) return;
-    adminMap = L.map('adminMap').setView([0,0],2);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(adminMap);
-  }
-  async function showAllMarkers(){
-    initAdminMap();
-    // clear
-    adminMarkers.forEach(m=>adminMap.removeLayer(m)); adminMarkers=[];
-    try {
-      const res = await fetch(API_URL + '?admin_list=true'); const data = await res.json();
-      if(!data.success) return;
-      data.users.forEach(u=>{
-        if(u.last_lat && u.last_lon){
-          const m = L.marker([u.last_lat,u.last_lon]).addTo(adminMap);
-          m.bindPopup(`<strong>${u.name||u.email}</strong><br>${u.codigo_x}<br>Últ: ${u.last_seen||''}<br>Batería:${u.last_battery ? u.last_battery.level+'%':''}`);
-          adminMarkers.push(m);
-        }
+      urgentes.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'notification-item';
+        div.innerHTML = `
+          <strong>⚠️ VENCIDO:</strong> ${r.nombre} (${r.id}) - 
+          Vencido hace ${Math.abs(r.dias)} días
+        `;
+        notificationsList.appendChild(div);
       });
-      if(adminMarkers.length) adminMap.setView(adminMarkers[0].getLatLng(), 10);
-    } catch(e){ console.error(e); }
-  }
 
-  // ---------- helper endpoints queries for initial session (if any) ----------
-  (function init(){
-    const s = loadSession();
-    if(s){ initAfterLogin(); } // session persisted
-  })();
+      proximos.forEach(r => {
+        const div = document.createElement('div');
+        div.className = 'notification-item warning';
+        div.innerHTML = `
+          <strong>⏰ PRÓXIMO:</strong> ${r.nombre} (${r.id}) - 
+          Vence en ${r.dias} días
+        `;
+        notificationsList.appendChild(div);
+      });
 
-  // ========================================================================
-  // Nota: este frontend confía en el backend Apps Script que te doy a continuación.
-  // ========================================================================
+      notifications.style.display = 'block';
+    }
+
+    async function cargarDatos(nombreHoja) {
+      contenedor.innerHTML = '<div class="loading">⏳ Cargando datos...</div>';
+      contenedor.style.display = 'block'; 
+      statsGrid.style.display = 'none';
+      notifications.style.display = 'none';
+      participantesTitle.style.display = 'none'; 
+
+      try {
+        const url = sheetBase + encodeURIComponent(nombreHoja);
+        const texto = await fetch(url).then(r => r.text());
+        const json = JSON.parse(texto.substring(47).slice(0, -2));
+        const filas = json.table.rows;
+        const registros = [];
+
+        filas.forEach(f => {
+          const c = f.c;
+          // Se ajusta la condición de longitud si fuera necesario, pero la original es c.length < 7
+          if (!c || c.length < 7) return; 
+          const id = c[1]?.v;
+          const nombre = c[2]?.v;
+          const ult = parseDate(c[3]?.v); // Columna D (Índice 3)
+          const patrocinio = c[4]?.v || 'No definido';
+          const tutora = c[5]?.v;
+          const numero = c[6]?.v;
+          if (!ult || !id || !nombre) return;
+          const proxima = addMonths(ult, 18);
+          const dias = diasRestantes(proxima);
+          registros.push({ id, nombre, ult, proxima, dias, patrocinio, tutora, numero });
+        });
+
+        currentData = registros;
+        updateStats(registros);
+        showNotifications(registros);
+        mostrarRegistros(registros);
+        
+        participantesTitle.style.display = 'block'; 
+
+      } catch (err) {
+        contenedor.innerHTML = '<div class="error">❌ Error cargando datos. Por favor, intente nuevamente.</div>';
+        contenedor.style.display = 'block'; 
+        participantesTitle.style.display = 'none'; 
+        console.error(err);
+      }
+    }
+
+    function mostrarRegistros(registros) {
+      if (registros.length === 0) {
+        contenedor.innerHTML = '<div class="empty-state"><h3>📭 No hay datos</h3><p>No se encontraron registros para esta tutora</p></div>';
+        participantesTitle.style.display = 'block'; 
+        return;
+      }
+
+      contenedor.innerHTML = '<div class="cards-grid" id="cardsGrid"></div>';
+      const cardsGrid = document.getElementById('cardsGrid');
+      
+      registros.sort((a, b) => a.proxima - b.proxima);
+      
+      registros.forEach((p, index) => {
+        const estado = estadoClase(p.dias);
+        const card = document.createElement('div');
+        card.className = `card ${estado}`;
+        card.style.animationDelay = `${index * 0.1}s`;
+        card.innerHTML = `
+          <div class="card-content">
+            <div class="card-row">
+              <span class="label">📋 Código:</span>
+              <span class="value">${p.id}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">👤 Nombre:</span>
+              <span class="value">${p.nombre}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">📅 Última Foto:</span>
+              <span class="value">${formatDate(p.ult)}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">⏭️ Próxima Foto:</span>
+              <span class="value">${formatDate(p.proxima)}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">⏱️ Días Restantes:</span>
+              <span class="value" style="font-weight: bold; font-size: 1.1rem;">${p.dias}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">📊 Estado:</span>
+              <span class="status-badge ${estado}">${estado.toUpperCase()}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">💰 Estado Patrocinio:</span>
+              <span class="value">${p.patrocinio}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">👩‍🏫 Tutora:</span>
+              <span class="value">${p.tutora}</span>
+            </div>
+            <div class="card-row">
+              <span class="label">📞 Puedes Llamar:</span>
+              <span class="value">
+                <a href="tel:${p.numero}"             style="text-decoration: none; color: white; font-weight: bold;">${p.numero}</a>
+              </span>
+            </div>
+            
+            <div class="update-buttons">
+              <button class="update-btn update-btn-today" 
+                      onclick="iniciarActualizacion('${p.id}', '${p.tutora}', 'hoy')">
+                ✅ Actualizar (HOY)
+              </button>
+              
+              <label for="date-input-${p.id}" class="update-btn update-btn-date">
+                📅 Actualizar (FECHA)
+              </label>
+              
+              <input type="date" 
+                     id="date-input-${p.id}" 
+                     class="date-input"
+                     onchange="iniciarActualizacion('${p.id}', '${p.tutora}', this.value)">
+            </div>
+            </div> 
+        `;
+        cardsGrid.appendChild(card);
+      });
+    }
+
+    selectTutora.addEventListener('change', () => {
+      const hoja = selectTutora.value;
+      if (hoja) {
+        cargarDatos(hoja);
+      } else {
+        // Ocultar todo si no se selecciona tutora
+        contenedor.innerHTML = '<div class="empty-state"><h3>👆 Selecciona una tutora</h3><p>Elige una tutora del menú desplegable para ver el seguimiento de sus beneficiarios</p></div>';
+        contenedor.style.display = 'block';
+        statsGrid.style.display = 'none';
+        notifications.style.display = 'none';
+        participantesTitle.style.display = 'none'; 
+      }
+    });
+
+    refreshBtn.addEventListener('click', () => {
+      const hoja = selectTutora.value;
+      if (hoja) {
+        cargarDatos(hoja);
+      }
+    });
+
+    function toggleSection(sectionId) {
+      const content = document.getElementById(sectionId);
+      const header = content.previousElementSibling;
+      const icon = header.querySelector('.toggle-icon');
+      
+      content.classList.toggle('collapsed');
+      icon.classList.toggle('rotated');
+    }
+
+    // Función para manejar la lógica de actualización
+    async function iniciarActualizacion(idParticipante, nombreTutora, fechaOpcion) {
+      let nuevaFecha;
+      
+      if (fechaOpcion === 'hoy') {
+        // Formato YYYY-MM-DD para compatibilidad con Apps Script
+        const d = new Date();
+        nuevaFecha = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+      } else {
+        // La opción es la fecha del input (ya en YYYY-MM-DD)
+        nuevaFecha = fechaOpcion;
+      }
+
+      const confirmMessage = `¿Estás seguro de que deseas actualizar la fecha de la última foto del participante ${idParticipante} a la fecha ${nuevaFecha}?`;
+
+      if (confirm(confirmMessage)) {
+        
+        // **VALIDACIÓN DE APPS SCRIPT URL**
+        if (APPS_SCRIPT_URL === 'URL_DE_TU_APPS_SCRIPT_AQUI' || APPS_SCRIPT_URL.length < 5) {
+             alert('❌ ¡ERROR DE CONFIGURACIÓN! Debes reemplazar "URL_DE_TU_APPS_SCRIPT_AQUI" con la URL de tu Web App de Google Apps Script para que esto funcione.');
+             return;
+        }
+        
+        try {
+          // Envío de datos al Apps Script
+          const response = await fetch(APPS_SCRIPT_URL, {
+              method: 'POST',
+              mode: 'no-cors', // Necesario para evitar problemas de CORS con Web Apps de Apps Script
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({
+                  action: 'updatePhotoDate',
+                  id: idParticipante,
+                  sheet: nombreTutora,
+                  newDate: nuevaFecha // YYYY-MM-DD
+              }).toString()
+          });
+          
+          // Nota: Debido a 'mode: no-cors', la respuesta HTTP siempre será opaca.
+          // El resultado exitoso se asume si no hay error de red.
+
+          alert(`✅ ¡Éxito! Solicitud enviada para actualizar ${idParticipante} a ${nuevaFecha}. La página se recargará para mostrar la nueva información.`);
+          
+          // Recargar los datos de la tutora actual para ver los cambios
+          cargarDatos(nombreTutora);
+          
+        } catch (error) {
+          console.error('Error al enviar la solicitud de actualización:', error);
+          alert('❌ Error de red al intentar contactar el servidor (Apps Script). Revisa la URL y la consola.');
+          
+          // Si hubo un error, limpia el input de fecha para permitir reintentar
+          if (fechaOpcion !== 'hoy') {
+             document.getElementById(`date-input-${idParticipante}`).value = '';
+          }
+        }
+      } else {
+        // Si cancela la actualización, limpia el input de fecha
+        if (fechaOpcion !== 'hoy') {
+             document.getElementById(`date-input-${idParticipante}`).value = '';
+        }
+      }
+    }
+
+
+    // Animación inicial
+    setTimeout(() => {
+      document.body.style.opacity = '1';
+    }, 100);
   </script>
 </body>
 </html>
