@@ -772,11 +772,7 @@
                       onclick="iniciarActualizacion('${p.id}', '${p.tutora}', 'hoy')">
                 ✅ Actualizar (HOY)
               </button>
-              
-              <label for="date-input-${p.id}" class="update-btn update-btn-date">
-                📅 Actualizar (FECHA)
-              </label>
-              
+
               <input type="date" 
                      id="date-input-${p.id}" 
                      class="date-input"
@@ -841,11 +837,12 @@
 
       if (confirm(confirmMessage)) {
         
-        // **VALIDACIÓN DE APPS SCRIPT URL**
-        if (APPS_SCRIPT_URL === 'https://script.google.com/macros/s/AKfycbzEXVLEtd331maKdyiuh-KyjdoUCWngry4UCB8JCOVP_h1QgLd3_skORcdUvsdXobnp/exec' || APPS_SCRIPT_URL.length < 5) {
-             alert('❌ ¡ERROR DE CONFIGURACIÓN! Debes reemplazar la URL del Apps Script.');
-             return;
-        }
+     // Validar que tenga /exec y no esté vacía
+     if (!APPS_SCRIPT_URL || !APPS_SCRIPT_URL.includes("/exec")) {
+         alert('❌ ERROR: La URL del Apps Script no es válida.');
+         return;
+     }
+
         
         try {
           // Usamos 'cors' para leer la respuesta del Apps Script
