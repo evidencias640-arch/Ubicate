@@ -138,22 +138,13 @@
       appearance: none;
       cursor: pointer;
       transition: all 0.3s ease;
-      
-      /* --- CORRECCIÓN PARA VISUALIZACIÓN DE LA LISTA DE TUTORAS --- */
-      /* Asegura que el texto y los emojis se vean correctamente al seleccionar */
       line-height: 1.2; 
-      /* --- FIN CORRECCIÓN --- */
     }
     
-    /* --- ESTILO ADICIONAL PARA LAS OPCIONES DE SELECT --- */
-    /* Aunque el estilo de las opciones es limitado por el navegador,
-       este asegura que el color de texto sea oscuro en la lista */
     select option {
         color: var(--dark);
-        background: var(--glass); /* Fondo en el desplegable */
+        background: var(--glass);
     }
-    /* --- FIN ESTILO ADICIONAL --- */
-
 
     select:focus {
       outline: none;
@@ -348,7 +339,7 @@
       animation: pulse 2s infinite;
     }
 
-    /* --- NUEVOS ESTILOS PARA BOTONES DE ACTUALIZACIÓN --- */
+    /* --- ESTILOS PARA BOTONES DE ACTUALIZACIÓN --- */
     .update-buttons {
       display: flex;
       gap: 10px;
@@ -366,7 +357,7 @@
       cursor: pointer;
       transition: background-color 0.3s ease, transform 0.3s ease;
       font-size: 0.9rem;
-      text-align: center; /* Asegura que el texto esté centrado en el botón */
+      text-align: center;
     }
 
     .update-btn-today {
@@ -384,6 +375,8 @@
       background: var(--warning);
       color: var(--dark);
       box-shadow: 0 4px 10px rgba(255, 179, 71, 0.3);
+      /* Esto es importante para el click en FECHA */
+      display: inline-block; 
     }
 
     .update-btn-date:hover {
@@ -392,7 +385,7 @@
     }
     
     .date-input {
-      /* Ocultamos el input de fecha, pero activamos el selector al hacer clic en el label */
+      /* Ocultamos el input de fecha, pero el label permite activarlo */
       opacity: 0; 
       width: 0;
       height: 0;
@@ -465,36 +458,6 @@
       color: var(--accent);
     }
 
-    @keyframes fadeInDown {
-      from { opacity: 0; transform: translateY(-30px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes slideInUp {
-      from { opacity: 0; transform: translateY(30px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes slideInLeft {
-      from { opacity: 0; transform: translateX(-30px); }
-      to { opacity: 1; transform: translateX(0); }
-    }
-
-    @keyframes slideInRight {
-      from { opacity: 0; transform: translateX(30px); }
-      to { opacity: 1; transform: translateX(0); }
-    }
-
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.7; }
-    }
-
     @media (max-width: 768px) {
       .container { padding: 15px; }
       
@@ -521,7 +484,6 @@
         font-size: 2rem;
       }
       
-      /* Ajuste para que los botones de actualización quepan mejor en móvil */
       .update-buttons {
           flex-direction: column;
       }
@@ -607,6 +569,7 @@
 
   <script src="/modulos/animaciones.js"></script>
   <script>
+    // Tu ID de la hoja de Google: 1WcYrZaDFjst7FW93FGS3B6FTDMl0QP17
     const sheetBase = 'https://docs.google.com/spreadsheets/d/1WcYrZaDFjst7FW93FGS3B6FTDMl0QP17/gviz/tq?tqx=out:json&sheet=';
 
     const contenedor = document.getElementById('contenedor');
@@ -618,7 +581,7 @@
 
     let currentData = [];
     
-    // URL de tu Apps Script (DEBES REEMPLAZAR CON TU PROPIA URL DESPLEGADA)
+    // 💥 ¡IMPORTANTE! REEMPLAZA ESTA CADENA CON LA URL DE TU WEB APP DESPLEGADA
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEXVLEtd331maKdyiuh-KyjdoUCWngry4UCB8JCOVP_h1QgLd3_skORcdUvsdXobnp/exec'; 
 
     function parseDate(val) {
@@ -717,7 +680,7 @@
 
         filas.forEach(f => {
           const c = f.c;
-          // Se ajusta la condición de longitud si fuera necesario, pero la original es c.length < 7
+          // Se asume que las columnas son: A, B(ID), C(Nombre), D(Ultima Foto), E(Patrocinio), F(Tutora), G(Numero)
           if (!c || c.length < 7) return; 
           const id = c[1]?.v;
           const nombre = c[2]?.v;
@@ -742,7 +705,7 @@
         contenedor.innerHTML = '<div class="error">❌ Error cargando datos. Por favor, intente nuevamente.</div>';
         contenedor.style.display = 'block'; 
         participantesTitle.style.display = 'none'; 
-        console.error(err);
+        console.error("Error al cargar datos:", err);
       }
     }
 
@@ -830,7 +793,6 @@
       if (hoja) {
         cargarDatos(hoja);
       } else {
-        // Ocultar todo si no se selecciona tutora
         contenedor.innerHTML = '<div class="empty-state"><h3>👆 Selecciona una tutora</h3><p>Elige una tutora del menú desplegable para ver el seguimiento de sus beneficiarios</p></div>';
         contenedor.style.display = 'block';
         statsGrid.style.display = 'none';
@@ -855,68 +817,80 @@
       icon.classList.toggle('rotated');
     }
 
-    // Función para manejar la lógica de actualización
+    // 💥 FUNCIÓN CRÍTICA DE ACTUALIZACIÓN (CORREGIDA PARA CORS)
     async function iniciarActualizacion(idParticipante, nombreTutora, fechaOpcion) {
-      let nuevaFecha;
+      let nuevaFechaStr;
+      let inputId = `date-input-${idParticipante}`;
       
       if (fechaOpcion === 'hoy') {
-        // Formato YYYY-MM-DD para compatibilidad con Apps Script
+        // Formato YYYY-MM-DD para el Apps Script
         const d = new Date();
-        nuevaFecha = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+        nuevaFechaStr = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
       } else {
         // La opción es la fecha del input (ya en YYYY-MM-DD)
-        nuevaFecha = fechaOpcion;
+        nuevaFechaStr = fechaOpcion;
       }
 
-      const confirmMessage = `¿Estás seguro de que deseas actualizar la fecha de la última foto del participante ${idParticipante} a la fecha ${nuevaFecha}?`;
+      // Si la fecha está vacía o es inválida, salimos
+      if (!nuevaFechaStr || nuevaFechaStr === '') {
+         document.getElementById(inputId).value = '';
+         return;
+      }
+      
+      const confirmMessage = `¿Estás seguro de que deseas actualizar la fecha de la última foto del participante ${idParticipante} a la fecha ${nuevaFechaStr}?`;
 
       if (confirm(confirmMessage)) {
         
         // **VALIDACIÓN DE APPS SCRIPT URL**
         if (APPS_SCRIPT_URL === 'URL_DE_TU_APPS_SCRIPT_AQUI' || APPS_SCRIPT_URL.length < 5) {
-             alert('❌ ¡ERROR DE CONFIGURACIÓN! Debes reemplazar "URL_DE_TU_APPS_SCRIPT_AQUI" con la URL de tu Web App de Google Apps Script para que esto funcione.');
+             alert('❌ ¡ERROR DE CONFIGURACIÓN! Debes reemplazar la URL del Apps Script.');
              return;
         }
         
         try {
-          // Envío de datos al Apps Script
+          // Usamos 'cors' para leer la respuesta del Apps Script
           const response = await fetch(APPS_SCRIPT_URL, {
               method: 'POST',
-              mode: 'no-cors', // Necesario para evitar problemas de CORS con Web Apps de Apps Script
+              mode: 'cors', 
               headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
               body: new URLSearchParams({
                   action: 'updatePhotoDate',
                   id: idParticipante,
                   sheet: nombreTutora,
-                  newDate: nuevaFecha // YYYY-MM-DD
+                  newDate: nuevaFechaStr // YYYY-MM-DD
               }).toString()
           });
           
-          // Nota: Debido a 'mode: no-cors', la respuesta HTTP siempre será opaca.
-          // El resultado exitoso se asume si no hay error de red.
+          const resultText = await response.text();
 
-          alert(`✅ ¡Éxito! Solicitud enviada para actualizar ${idParticipante} a ${nuevaFecha}. La página se recargará para mostrar la nueva información.`);
+          if (resultText.includes("Éxito")) {
+              alert(`✅ ¡Éxito! Fecha de ${idParticipante} actualizada a ${nuevaFechaStr}. Recargando datos...`);
+          } else {
+              // Si Apps Script devuelve un error 
+              alert(`⚠️ Error en Apps Script. Intenta de nuevo o revisa el log. Mensaje: ${resultText}`);
+              console.error("Error devuelto por Apps Script:", resultText);
+          }
           
           // Recargar los datos de la tutora actual para ver los cambios
           cargarDatos(nombreTutora);
           
         } catch (error) {
           console.error('Error al enviar la solicitud de actualización:', error);
-          alert('❌ Error de red al intentar contactar el servidor (Apps Script). Revisa la URL y la consola.');
+          alert('❌ Error de red al intentar contactar el servidor (Apps Script).');
           
-          // Si hubo un error, limpia el input de fecha para permitir reintentar
-          if (fechaOpcion !== 'hoy') {
-             document.getElementById(`date-input-${idParticipante}`).value = '';
-          }
+        } finally {
+            // Limpiar el campo de fecha seleccionado
+            if (document.getElementById(inputId)) {
+                document.getElementById(inputId).value = '';
+            }
         }
       } else {
         // Si cancela la actualización, limpia el input de fecha
-        if (fechaOpcion !== 'hoy') {
-             document.getElementById(`date-input-${idParticipante}`).value = '';
+        if (document.getElementById(inputId)) {
+            document.getElementById(inputId).value = '';
         }
       }
     }
-
 
     // Animación inicial
     setTimeout(() => {
