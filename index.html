@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lector de PDF417 (Cédula) - Súper Robusto V3</title>
+    <title>Lector de Documentos (OCR) - Colombia</title>
     
     <style>
         body {
@@ -20,7 +20,7 @@
         
         button {
             padding: 12px 25px;
-            background-color: #2980b9;
+            background-color: #27ae60; /* Verde para OCR/Captura */
             color: white;
             border: none;
             border-radius: 8px;
@@ -29,7 +29,7 @@
             transition: background-color 0.3s;
             margin-bottom: 15px;
         }
-        button:hover { background-color: #3498db; }
+        button:hover { background-color: #2ecc71; }
         
         .message {
             padding: 10px 15px;
@@ -37,18 +37,18 @@
             border-radius: 5px;
             font-weight: bold;
             width: 95%;
-            max-width: 400px;
+            max-width: 450px;
             font-size: 0.9em;
         }
         .error { background-color: #e74c3c; color: white; }
         .success { background-color: #2ecc71; color: white; }
-        .info { background-color: #f1c40f; color: #333; }
+        .info { background-color: #3498db; color: white; }
         
         #video-container {
             position: relative;
             width: 95%;
-            max-width: 400px;
-            padding-top: 75%; 
+            max-width: 450px;
+            padding-top: 70%; 
             background-color: #000;
             border-radius: 10px;
             overflow: hidden;
@@ -62,21 +62,8 @@
             height: 100%;
             display: block;
         }
-        #scan-feedback {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            z-index: 10;
-            border: 3px dashed #f39c12; 
-            width: 80%;
-            height: 60%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
+        #canvas { display: none; } /* Canvas oculto para la captura */
+
         #result-box {
             margin-top: 20px;
             padding: 15px;
@@ -84,249 +71,283 @@
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
             width: 95%;
-            max-width: 400px;
+            max-width: 450px;
             text-align: left;
         }
-        .data-item {
-            margin-bottom: 8px;
-            font-size: 0.95em;
-        }
-        .data-item strong { color: #34495e; }
         
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
-    <h1>Lector de Cédula (PDF417)</h1>
+    <h1>Lector OCR de Documentos de Identidad</h1>
     
-    <div id="status-message" class="message info">Cargando...</div>
+    <div id="status-message" class="message info">Cargando Tesseract.js...</div>
 
-    <button id="startButton">Iniciar Escaneo</button>
+    <button id="cameraButton">Iniciar Cámara</button>
+    <button id="captureButton" class="hidden" disabled>Capturar Documento y Leer (OCR)</button>
 
     <div id="video-container" class="hidden">
         <video id="video" playsinline></video>
-        <div id="scan-feedback">Alinee el código PDF417</div>
     </div>
+    
+    <canvas id="canvas"></canvas>
 
     <div id="result-box" class="hidden">
         <h2>✅ Datos Extraídos</h2>
         <div class="data-item">
-            <strong>Texto Crudo:</strong> <span id="decodedText"></span>
+            <strong>Tipo de Documento:</strong> <span id="docType">N/A</span>
         </div>
         <div class="data-item">
-            <strong>Tipo de Documento:</strong> <span id="docType"></span>
+            <strong>Número de Documento:</strong> <span id="docNumber">N/A</span>
         </div>
         <div class="data-item">
-            <strong>Número de Documento:</strong> <span id="docNumber"></span>
+            <strong>Nombre Completo:</strong> <span id="fullName">N/A</span>
         </div>
-        <div class="data-item">
-            <strong>Nombre Completo:</strong> <span id="fullName"></span>
-        </div>
+        <hr>
+        <p><strong>Texto OCR Crudo (para diagnóstico):</strong></p>
+        <pre id="rawText"></pre>
     </div>
 
-    <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+    <script src='https://unpkg.com/tesseract.js@5.0.3/dist/tesseract.min.js'></script>
 
     <script>
-        // Constantes de Elementos DOM
+        // DOM Elements
         const video = document.getElementById('video');
-        const startButton = document.getElementById('startButton');
+        const canvas = document.getElementById('canvas');
+        const cameraButton = document.getElementById('cameraButton');
+        const captureButton = document.getElementById('captureButton');
         const videoContainer = document.getElementById('video-container');
         const statusMessage = document.getElementById('status-message');
         const resultBox = document.getElementById('result-box');
+        const rawText = document.getElementById('rawText');
+        const docTypeSpan = document.getElementById('docType');
+        const docNumberSpan = document.getElementById('docNumber');
+        const fullNameSpan = document.getElementById('fullName');
 
-        // Elementos de Resultado
-        const decodedText = document.getElementById('decodedText');
-        const docType = document.getElementById('docType');
-        const docNumber = document.getElementById('docNumber');
-        const fullName = document.getElementById('fullName');
+        // State Variables
+        let currentStream = null;
+        let isCameraActive = false;
+        let worker = null;
 
-        // Variables de estado
-        let codeReader = null;
-        let isScanning = false;
-        let currentStream = null; // Para guardar la referencia del stream de la cámara
-
-        // --- UTILIDADES ---
+        // --- Utilidades de Estado ---
         function setStatus(text, type = 'info') {
             statusMessage.textContent = text;
             statusMessage.className = `message ${type}`;
         }
-        
-        function toggleScanning(show) {
+
+        function toggleCameraView(show) {
             videoContainer.classList.toggle('hidden', !show);
+            captureButton.classList.toggle('hidden', !show);
             resultBox.classList.add('hidden');
-            startButton.textContent = show ? 'Detener Escaneo' : 'Iniciar Escaneo';
+            cameraButton.textContent = show ? 'Detener Cámara' : 'Iniciar Cámara';
         }
 
-        // --- MANEJO DE PERMISOS E INICIALIZACIÓN ---
+        // --- Lógica de la Cámara ---
 
-        function initializeReader() {
-            if (typeof ZXing === 'undefined') {
-                 setStatus('❌ Error: La librería ZXing no se cargó correctamente.', 'error');
-                 startButton.disabled = true;
-                 return;
-            }
-
-            try {
-                // Configurar el lector para PDF417
-                codeReader = new ZXing.BrowserCodeReader(null, { 
-                    formats: [ZXing.BarcodeFormat.PDF_417],
-                    videoConstraints: {
-                         // Preferir la cámara trasera para mejor calidad
-                         facingMode: { ideal: 'environment' }
-                    }
-                });
-                setStatus('Lector inicializado. Pulsa "Iniciar Escaneo".', 'info');
-                startButton.disabled = false;
-            } catch (error) {
-                setStatus('❌ Error: No se pudo inicializar la librería de decodificación.', 'error');
-                console.error('Error de inicialización de ZXing:', error);
-                startButton.disabled = true;
-            }
-        }
-
-        /**
-         * Solución al "Trying to play video that is already playing."
-         * Detiene limpiamente el stream de video de la cámara.
-         */
-        function stopCameraStream() {
-            if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-                currentStream = null;
-            }
-            if (video.srcObject) {
-                video.srcObject = null;
-            }
-        }
-        
-        function stopScanning() {
-            if (!codeReader) return;
-            
-            // 1. Detener el proceso interno de ZXing
-            codeReader.reset();
-            // 2. Detener el stream de la cámara (Súper Importante)
-            stopCameraStream(); 
-
-            toggleScanning(false);
-            isScanning = false;
-        }
-
-        /**
-         * Función que solicita el acceso a la cámara y luego inicia el escaneo.
-         */
-        async function startScanning() {
-            if (!codeReader) {
-                setStatus('❌ El lector no está listo. Intenta recargar.', 'error');
-                return;
-            }
-            if (isScanning) {
-                console.log("Advertencia: El escaneo ya está activo.");
+        async function startCamera() {
+            if (isCameraActive) {
+                stopCamera();
                 return;
             }
 
-            stopScanning(); // Asegurar que todo está limpio antes de empezar
-            
             setStatus('Solicitando permiso de cámara...', 'info');
-            toggleScanning(true);
-            isScanning = true;
-
+            
             try {
-                // 1. Obtener el stream de la cámara manualmente (Para manejo de errores)
+                // Preferir la cámara trasera para mejor calidad OCR
                 currentStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: { ideal: 'environment' } } 
                 });
                 
-                // 2. Asignar el stream al elemento de video
                 video.srcObject = currentStream;
-                video.play();
-                
-                setStatus('Cámara activa. Buscando código PDF417...', 'info');
+                await video.play();
 
-                // 3. Iniciar la decodificación usando el elemento de video
-                // La llamada a decodeFromVideo continua en segundo plano
-                codeReader.decodeFromVideo(video, (result, err) => {
-                    if (!isScanning) return; 
-
-                    if (result) {
-                        setStatus('✅ Código PDF417 leído con éxito.', 'success');
-                        const extracted = extractColombianData(result.text);
-                        
-                        decodedText.textContent = result.text;
-                        docType.textContent = extracted.tipoDocumento;
-                        docNumber.textContent = extracted.numeroDocumento;
-                        fullName.textContent = extracted.nombreCompleto;
-                        
-                        resultBox.classList.remove('hidden');
-                        stopScanning();
-                    } else if (err && !(err instanceof ZXing.NotFoundException)) {
-                         // Manejar errores de decodificación que no sean "No encontrado"
-                        console.error('Error de lectura/decodificación:', err);
-                        setStatus('❌ Error crítico de decodificación. Revisa la consola.', 'error');
-                        stopScanning(); 
-                    }
-                });
-
+                isCameraActive = true;
+                toggleCameraView(true);
+                captureButton.disabled = false;
+                setStatus('Cámara activa. Alinee el documento y capture.', 'success');
 
             } catch (error) {
-                // Manejo de errores de hardware y permisos
-                console.error('Error al intentar acceder a la cámara:', error);
+                console.error('Error al acceder a la cámara:', error);
+                let message = '❌ Error al iniciar la cámara.';
                 if (error.name === 'NotAllowedError') {
-                    setStatus('⚠️ Acceso a cámara denegado. Habilita los permisos en la configuración.', 'error');
+                    message = '⚠️ Permiso denegado. Habilita el acceso a la cámara en tu navegador.';
                 } else if (error.name === 'NotFoundError') {
-                    setStatus('⚠️ No se encontró ninguna cámara disponible.', 'error');
-                } else {
-                    setStatus(`❌ Error al iniciar la cámara: ${error.message}`, 'error');
+                    message = '⚠️ No se encontró cámara.';
                 }
-                stopScanning();
+                setStatus(message, 'error');
+                stopCamera();
+            }
+        }
+
+        function stopCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
+            }
+            video.srcObject = null;
+            isCameraActive = false;
+            captureButton.disabled = true;
+            toggleCameraView(false);
+            setStatus('Cámara detenida.', 'info');
+        }
+
+        // --- Lógica de Captura y OCR ---
+
+        function captureImage() {
+            if (!isCameraActive) return;
+
+            // 1. Dibujar el frame actual del video en el canvas
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // 2. Detener la cámara mientras se procesa
+            stopCamera();
+            setStatus('Documento capturado. Iniciando OCR, esto puede tardar...', 'info');
+
+            // 3. Ejecutar OCR
+            runOCR(canvas);
+        }
+
+        async function runOCR(image) {
+            try {
+                // Mostrar el cuadro de resultados mientras procesa
+                resultBox.classList.remove('hidden');
+                docTypeSpan.textContent = 'Procesando...';
+                docNumberSpan.textContent = 'Procesando...';
+                fullNameSpan.textContent = 'Procesando...';
+                rawText.textContent = 'Cargando datos...';
+                
+                // OCR: Reconocimiento de caracteres en español (spa)
+                const { data: { text, progress } } = await worker.recognize(image);
+
+                setStatus('✅ OCR Completado. Extrayendo datos.', 'success');
+                
+                // Mostrar texto crudo
+                rawText.textContent = text;
+                
+                // Extraer los datos estructurados
+                const extracted = extractDocumentData(text);
+                
+                // Mostrar resultados extraídos
+                docTypeSpan.textContent = extracted.tipoDocumento;
+                docNumberSpan.textContent = extracted.numeroDocumento;
+                fullNameSpan.textContent = extracted.nombreCompleto;
+                
+            } catch (error) {
+                console.error('Error durante el OCR:', error);
+                setStatus('❌ Error grave de OCR. Inténtalo de nuevo.', 'error');
+                rawText.textContent = `Error: ${error.message}`;
             }
         }
 
 
-        // --- LÓGICA DE PARSING (Extracción de campos) ---
-        function extractColombianData(dataString) {
+        // --- Lógica de Extracción de Datos (PARSING) ---
+
+        /**
+         * Implementación de la lógica de extracción basada en el texto reconocido (OCR).
+         * @param {string} ocrText - Texto crudo reconocido por Tesseract.js.
+         */
+        function extractDocumentData(ocrText) {
             const defaultResult = {
                 tipoDocumento: 'N/A',
                 numeroDocumento: 'N/A',
-                nombreCompleto: 'No se pudo parsear (Formato desconocido)'
+                nombreCompleto: 'No se pudo encontrar el nombre/número.'
             };
-            
-            if (dataString && dataString.startsWith('@|')) {
-                const parts = dataString.substring(2).split('|').map(p => p.trim());
-                
-                if (parts.length >= 6) {
-                    const tipoDoc = parts[0]; 
-                    const numDoc = parts[1]; 
-                    const apellido1 = parts[2] || ''; 
-                    const apellido2 = parts[3] || ''; 
-                    const nombre1 = parts[4] || ''; 
-                    const nombre2 = parts[5] || ''; 
-                    
-                    const nombreCompleto = `${nombre1} ${nombre2} ${apellido1} ${apellido2}`.trim();
 
-                    return {
-                        tipoDocumento: tipoDoc || 'N/A',
-                        numeroDocumento: numDoc || 'N/A',
-                        nombreCompleto: nombreCompleto || 'N/A'
-                    };
-                } else {
-                    return { ...defaultResult, nombreCompleto: 'Error: Cadena incompleta o formato inesperado.' };
-                }
-            } 
+            // Normalizar el texto (pasar a mayúsculas, quitar espacios extra)
+            const normalizedText = ocrText.toUpperCase().replace(/\s+/g, ' ').trim();
+            const lines = normalizedText.split('\n').map(line => line.trim()).filter(line => line.length > 3);
+
+            let docType = 'N/A';
+            let docNumber = 'N/A';
+            let fullName = 'N/A';
             
-            return defaultResult;
+            // 1. Identificar Tipo de Documento y Número
+            
+            // Regex para Cédula de Ciudadanía (CC) o Número Único de Identificación Personal (NUIP)
+            // Busca la palabra NUMERO o NUIP seguida de 8-10 dígitos (o 10-12)
+            // Ejemplo: NUMERO 6.845.256.666
+            const ccRegex = /(?:CEDULA|NÚMERO|NUMERO|NUIP)\s*[\.:]*\s*(\d{1,3}[\.\s]\d{3}[\.\s]\d{3}[\.\s]\d{3}|\d{8,12})/i;
+            const tiRegex = /(?:TARJETA|T\.I\.)\s*(?:NÚMERO|NUMERO)\s*[\.:]*\s*(\d{8,12})/i;
+            const pepRegex = /(?:NO\.|PERMISO)\s*(\d{8,15})/i; // Permiso Especial de Permanencia o PPT
+
+            for (const line of lines) {
+                let match;
+
+                // Cédula de Ciudadanía (CC)
+                if (match = line.match(ccRegex)) {
+                    docType = 'CC';
+                    // Limpiar el número de puntos y espacios
+                    docNumber = match[1].replace(/[\.\s]/g, '');
+                    break; 
+                }
+                
+                // Tarjeta de Identidad (TI)
+                if (match = line.match(tiRegex)) {
+                    docType = 'TI';
+                    docNumber = match[1].replace(/[\.\s]/g, '');
+                    break; 
+                }
+
+                 // Permiso por Protección Temporal (PPT) o similares (PEPx)
+                if (match = line.match(pepRegex)) {
+                    docType = 'PPT/PEP';
+                    docNumber = match[1].replace(/[\.\s]/g, '');
+                    break; 
+                }
+            }
+
+            // 2. Identificar Nombre y Apellidos
+            
+            // Esto es la parte más difícil del OCR. Buscamos líneas que contengan las palabras clave.
+            let apellidoLine = lines.find(l => l.includes('APELLIDO') || l.includes('APELLIDOS'));
+            let nombreLine = lines.find(l => l.includes('NOMBRE') || l.includes('NOMBRES'));
+
+            if (apellidoLine && nombreLine) {
+                // Intentar extraer el texto que sigue a la palabra clave
+                const cleanApellido = apellidoLine.replace(/(?:APELLIDOS|APELLIDO)\s*[\.:]*\s*/i, '').trim();
+                const cleanNombre = nombreLine.replace(/(?:NOMBRES|NOMBRE)\s*[\.:]*\s*/i, '').trim();
+                
+                fullName = `${cleanNombre} ${cleanApellido}`.trim();
+                
+                // Si la extracción del nombre fue exitosa, actualizar el resultado
+                if (fullName.length > 5 && fullName !== 'N/A') {
+                     // Solo actualizar si encontramos algo que parezca un nombre
+                     defaultResult.nombreCompleto = fullName;
+                }
+            }
+            
+            // Resultado final
+            return {
+                tipoDocumento: docType,
+                numeroDocumento: docNumber,
+                nombreCompleto: fullName.length > 5 ? fullName : defaultResult.nombreCompleto
+            };
         }
 
-        // --- MANEJADOR DE EVENTOS ---
-        startButton.addEventListener('click', () => {
-            if (isScanning) {
-                stopScanning();
-                setStatus('Escaneo detenido por el usuario.', 'info');
-            } else {
-                startScanning();
+        // --- Inicialización ---
+        
+        async function initializeTesseractWorker() {
+            setStatus('Cargando núcleo de OCR (Tesseract.js)...', 'info');
+             try {
+                // Crear el worker de Tesseract (web worker para procesamiento en segundo plano)
+                worker = await Tesseract.createWorker('spa'); // Usar español para documentos colombianos
+                setStatus('Tesseract Worker cargado. Listo para iniciar cámara.', 'success');
+                cameraButton.disabled = false;
+            } catch (error) {
+                setStatus('❌ Error: Falló la inicialización de Tesseract. Revisa la conexión.', 'error');
+                console.error(error);
+                cameraButton.disabled = true;
             }
-        });
+        }
+        
+        cameraButton.addEventListener('click', startCamera);
+        captureButton.addEventListener('click', captureImage);
 
-        // Inicializar el lector al cargar la página
-        document.addEventListener('DOMContentLoaded', initializeReader);
+        // Iniciar la carga del worker
+        document.addEventListener('DOMContentLoaded', initializeTesseractWorker);
     </script>
 </body>
 </html>
