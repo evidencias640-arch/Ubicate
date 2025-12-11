@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lector de Documentos (OCR) - Colombia</title>
+    <title>Sistema Automático de Captura y Exportación (OCR)</title>
     
     <style>
         body {
@@ -18,18 +18,25 @@
         }
         h1 { color: #2c3e50; margin-bottom: 20px; font-size: 1.5em; }
         
+        .btn-group { margin-bottom: 20px; }
+        
         button {
-            padding: 12px 25px;
-            background-color: #27ae60; /* Verde para OCR/Captura */
-            color: white;
+            padding: 12px 20px;
             border: none;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 1.1em;
+            font-size: 1em;
             transition: background-color 0.3s;
-            margin-bottom: 15px;
+            margin: 5px;
         }
-        button:hover { background-color: #2ecc71; }
+        #cameraButton { background-color: #2980b9; color: white; }
+        #cameraButton:hover { background-color: #3498db; }
+        
+        #exportButton { background-color: #27ae60; color: white; }
+        #exportButton:hover { background-color: #2ecc71; }
+        
+        #clearButton { background-color: #e74c3c; color: white; }
+        #clearButton:hover { background-color: #c0392b; }
         
         .message {
             padding: 10px 15px;
@@ -43,6 +50,7 @@
         .error { background-color: #e74c3c; color: white; }
         .success { background-color: #2ecc71; color: white; }
         .info { background-color: #3498db; color: white; }
+        .warning { background-color: #f1c40f; color: #333; }
         
         #video-container {
             position: relative;
@@ -61,8 +69,9 @@
             width: 100%;
             height: 100%;
             display: block;
+            border: 5px solid #2980b9; /* Borde para indicar que está activo */
         }
-        #canvas { display: none; } /* Canvas oculto para la captura */
+        #canvas { display: none; } 
 
         #result-box {
             margin-top: 20px;
@@ -74,17 +83,32 @@
             max-width: 450px;
             text-align: left;
         }
+        .data-item { margin-bottom: 8px; font-size: 0.95em; }
         
+        #dataList {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 95%;
+            max-width: 450px;
+            text-align: left;
+        }
         .hidden { display: none !important; }
     </style>
 </head>
 <body>
-    <h1>Lector OCR de Documentos de Identidad</h1>
+    <h1>Lector Automático de Documentos Colombianos</h1>
     
     <div id="status-message" class="message info">Cargando Tesseract.js...</div>
 
-    <button id="cameraButton">Iniciar Cámara</button>
-    <button id="captureButton" class="hidden" disabled>Capturar Documento y Leer (OCR)</button>
+    <div class="btn-group">
+        <button id="cameraButton">Iniciar Captura Automática</button>
+        <button id="exportButton" disabled>Descargar Excel (CSV)</button>
+        <button id="clearButton">Limpiar Datos Locales</button>
+    </div>
 
     <div id="video-container" class="hidden">
         <video id="video" playsinline></video>
@@ -93,20 +117,28 @@
     <canvas id="canvas"></canvas>
 
     <div id="result-box" class="hidden">
-        <h2>✅ Datos Extraídos</h2>
+        <h2>Último Escaneo:</h2>
         <div class="data-item">
-            <strong>Tipo de Documento:</strong> <span id="docType">N/A</span>
+            <strong>Estado:</strong> <span id="scanStatus"></span>
         </div>
         <div class="data-item">
-            <strong>Número de Documento:</strong> <span id="docNumber">N/A</span>
+            <strong>Tipo de Documento:</strong> <span id="docTypeSpan">N/A</span>
         </div>
         <div class="data-item">
-            <strong>Nombre Completo:</strong> <span id="fullName">N/A</span>
+            <strong>Número de Documento:</strong> <span id="docNumberSpan">N/A</span>
         </div>
-        <hr>
-        <p><strong>Texto OCR Crudo (para diagnóstico):</strong></p>
-        <pre id="rawText"></pre>
+        <div class="data-item">
+            <strong>Nombre Completo:</strong> <span id="fullNameSpan">N/A</span>
+        </div>
     </div>
+    
+    <div id="dataList">
+        <h3>Documentos Capturados (<span id="countSpan">0</span>):</h3>
+        <ul id="capturedList">
+            <li>(Datos aparecerán aquí)</li>
+        </ul>
+    </div>
+
 
     <script src='https://unpkg.com/tesseract.js@5.0.3/dist/tesseract.min.js'></script>
 
@@ -115,21 +147,60 @@
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
         const cameraButton = document.getElementById('cameraButton');
-        const captureButton = document.getElementById('captureButton');
+        const exportButton = document.getElementById('exportButton');
+        const clearButton = document.getElementById('clearButton');
         const videoContainer = document.getElementById('video-container');
         const statusMessage = document.getElementById('status-message');
         const resultBox = document.getElementById('result-box');
-        const rawText = document.getElementById('rawText');
-        const docTypeSpan = document.getElementById('docType');
-        const docNumberSpan = document.getElementById('docNumber');
-        const fullNameSpan = document.getElementById('fullName');
+        const capturedList = document.getElementById('capturedList');
+        const countSpan = document.getElementById('countSpan');
+        
+        const scanStatusSpan = document.getElementById('scanStatus');
+        const docTypeSpan = document.getElementById('docTypeSpan');
+        const docNumberSpan = document.getElementById('docNumberSpan');
+        const fullNameSpan = document.getElementById('fullNameSpan');
 
         // State Variables
         let currentStream = null;
         let isCameraActive = false;
         let worker = null;
+        let documentsData = [];
+        let autoCaptureTimer = null;
 
-        // --- Utilidades de Estado ---
+        const STORAGE_KEY = 'colombian_documents_data';
+        const CAPTURE_DELAY_MS = 3000; // 3 segundos para captura automática
+
+        // --- Utilidades de Persistencia y Visualización ---
+
+        function loadData() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            documentsData = data ? JSON.parse(data) : [];
+            updateUIList();
+        }
+
+        function saveData() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(documentsData));
+            updateUIList();
+        }
+        
+        function updateUIList() {
+            capturedList.innerHTML = '';
+            countSpan.textContent = documentsData.length;
+            
+            if (documentsData.length === 0) {
+                 capturedList.innerHTML = '<li>Aún no hay documentos capturados.</li>';
+                 exportButton.disabled = true;
+                 return;
+            }
+            
+            documentsData.slice(-10).reverse().forEach(doc => { // Mostrar los últimos 10
+                const li = document.createElement('li');
+                li.textContent = `${doc.documentNumber} - ${doc.fullName} (${doc.type})`;
+                capturedList.appendChild(li);
+            });
+            exportButton.disabled = false;
+        }
+
         function setStatus(text, type = 'info') {
             statusMessage.textContent = text;
             statusMessage.className = `message ${type}`;
@@ -137,23 +208,43 @@
 
         function toggleCameraView(show) {
             videoContainer.classList.toggle('hidden', !show);
-            captureButton.classList.toggle('hidden', !show);
             resultBox.classList.add('hidden');
-            cameraButton.textContent = show ? 'Detener Cámara' : 'Iniciar Cámara';
+            cameraButton.textContent = show ? 'Detener Captura' : 'Iniciar Captura Automática';
         }
 
-        // --- Lógica de la Cámara ---
+        // --- Lógica de la Cámara y Captura Automática ---
 
-        async function startCamera() {
+        function stopCameraStream() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
+            }
+            if (video.srcObject) {
+                video.srcObject = null;
+            }
+        }
+        
+        function stopAutoCapture() {
+            if (autoCaptureTimer) {
+                clearTimeout(autoCaptureTimer);
+                autoCaptureTimer = null;
+            }
+            stopCameraStream();
+            isCameraActive = false;
+            toggleCameraView(false);
+            setStatus('Captura automática detenida.', 'info');
+        }
+
+        async function startCameraAndAutoCapture() {
             if (isCameraActive) {
-                stopCamera();
+                stopAutoCapture();
                 return;
             }
 
             setStatus('Solicitando permiso de cámara...', 'info');
             
             try {
-                // Preferir la cámara trasera para mejor calidad OCR
+                // Obtener stream de la cámara trasera
                 currentStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: { ideal: 'environment' } } 
                 });
@@ -163,8 +254,10 @@
 
                 isCameraActive = true;
                 toggleCameraView(true);
-                captureButton.disabled = false;
-                setStatus('Cámara activa. Alinee el documento y capture.', 'success');
+                
+                // Iniciar la captura automática después de 3 segundos
+                setStatus(`Cámara activa. Captura automática en ${CAPTURE_DELAY_MS / 1000}s...`, 'warning');
+                autoCaptureTimer = setTimeout(captureAndProcess, CAPTURE_DELAY_MS);
 
             } catch (error) {
                 console.error('Error al acceder a la cámara:', error);
@@ -175,88 +268,89 @@
                     message = '⚠️ No se encontró cámara.';
                 }
                 setStatus(message, 'error');
-                stopCamera();
+                stopAutoCapture();
             }
         }
 
-        function stopCamera() {
-            if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-                currentStream = null;
-            }
-            video.srcObject = null;
-            isCameraActive = false;
-            captureButton.disabled = true;
-            toggleCameraView(false);
-            setStatus('Cámara detenida.', 'info');
+        function captureAndProcess() {
+             if (!isCameraActive) return;
+             
+             // 1. Dibujar el frame actual en el canvas
+             canvas.width = video.videoWidth;
+             canvas.height = video.videoHeight;
+             const ctx = canvas.getContext('2d');
+             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+             // 2. Detener la cámara y el timer
+             stopAutoCapture(); 
+             setStatus('Documento capturado. Iniciando OCR y detección de duplicados...', 'info');
+
+             // 3. Ejecutar OCR y guardar
+             runOCRAndSave(canvas);
         }
 
-        // --- Lógica de Captura y OCR ---
+        // --- Lógica de OCR, Duplicados y Guardado ---
 
-        function captureImage() {
-            if (!isCameraActive) return;
-
-            // 1. Dibujar el frame actual del video en el canvas
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            // 2. Detener la cámara mientras se procesa
-            stopCamera();
-            setStatus('Documento capturado. Iniciando OCR, esto puede tardar...', 'info');
-
-            // 3. Ejecutar OCR
-            runOCR(canvas);
-        }
-
-        async function runOCR(image) {
+        async function runOCRAndSave(image) {
+            resultBox.classList.remove('hidden');
+            scanStatusSpan.textContent = 'Procesando...';
+            
             try {
-                // Mostrar el cuadro de resultados mientras procesa
-                resultBox.classList.remove('hidden');
-                docTypeSpan.textContent = 'Procesando...';
-                docNumberSpan.textContent = 'Procesando...';
-                fullNameSpan.textContent = 'Procesando...';
-                rawText.textContent = 'Cargando datos...';
-                
                 // OCR: Reconocimiento de caracteres en español (spa)
-                const { data: { text, progress } } = await worker.recognize(image);
-
-                setStatus('✅ OCR Completado. Extrayendo datos.', 'success');
-                
-                // Mostrar texto crudo
-                rawText.textContent = text;
+                const { data: { text } } = await worker.recognize(image);
                 
                 // Extraer los datos estructurados
                 const extracted = extractDocumentData(text);
                 
-                // Mostrar resultados extraídos
+                // Limpiar el número de documento para comparación
+                const uniqueId = extracted.numeroDocumento.replace(/[^a-zA-Z0-9]/g, ''); 
+                
                 docTypeSpan.textContent = extracted.tipoDocumento;
                 docNumberSpan.textContent = extracted.numeroDocumento;
                 fullNameSpan.textContent = extracted.nombreCompleto;
                 
+                // 4. Detección de Duplicados
+                const isDuplicate = documentsData.some(doc => doc.uniqueId === uniqueId);
+                
+                if (isDuplicate) {
+                    scanStatusSpan.textContent = 'DUPLICADO';
+                    setStatus(`⚠️ Documento ${uniqueId} ya ha sido escaneado. No guardado.`, 'warning');
+                } else if (uniqueId && uniqueId !== 'N/A' && extracted.nombreCompleto !== 'N/A') {
+                    // 5. Guardar el nuevo documento
+                    const newDoc = {
+                        uniqueId: uniqueId, // ID limpio para la verificación
+                        documentNumber: extracted.numeroDocumento,
+                        type: extracted.tipoDocumento,
+                        fullName: extracted.nombreCompleto,
+                        scanDate: new Date().toISOString()
+                    };
+                    documentsData.push(newDoc);
+                    saveData();
+                    
+                    scanStatusSpan.textContent = 'GUARDADO';
+                    setStatus(`✅ Documento ${uniqueId} guardado con éxito. Total: ${documentsData.length}.`, 'success');
+                } else {
+                    scanStatusSpan.textContent = 'FALLIDO';
+                    setStatus('❌ No se pudo extraer el Número y/o Nombre. Intenta con mejor enfoque.', 'error');
+                }
+                
             } catch (error) {
                 console.error('Error durante el OCR:', error);
-                setStatus('❌ Error grave de OCR. Inténtalo de nuevo.', 'error');
-                rawText.textContent = `Error: ${error.message}`;
+                scanStatusSpan.textContent = 'FALLIDO';
+                setStatus('❌ Error grave de OCR. Revisa la consola.', 'error');
             }
         }
 
 
-        // --- Lógica de Extracción de Datos (PARSING) ---
+        // --- Lógica de Extracción (MISMA LÓGICA ROBUSTA) ---
 
-        /**
-         * Implementación de la lógica de extracción basada en el texto reconocido (OCR).
-         * @param {string} ocrText - Texto crudo reconocido por Tesseract.js.
-         */
         function extractDocumentData(ocrText) {
             const defaultResult = {
                 tipoDocumento: 'N/A',
                 numeroDocumento: 'N/A',
-                nombreCompleto: 'No se pudo encontrar el nombre/número.'
+                nombreCompleto: 'N/A'
             };
 
-            // Normalizar el texto (pasar a mayúsculas, quitar espacios extra)
             const normalizedText = ocrText.toUpperCase().replace(/\s+/g, ' ').trim();
             const lines = normalizedText.split('\n').map(line => line.trim()).filter(line => line.length > 3);
 
@@ -264,89 +358,117 @@
             let docNumber = 'N/A';
             let fullName = 'N/A';
             
-            // 1. Identificar Tipo de Documento y Número
-            
-            // Regex para Cédula de Ciudadanía (CC) o Número Único de Identificación Personal (NUIP)
-            // Busca la palabra NUMERO o NUIP seguida de 8-10 dígitos (o 10-12)
-            // Ejemplo: NUMERO 6.845.256.666
             const ccRegex = /(?:CEDULA|NÚMERO|NUMERO|NUIP)\s*[\.:]*\s*(\d{1,3}[\.\s]\d{3}[\.\s]\d{3}[\.\s]\d{3}|\d{8,12})/i;
             const tiRegex = /(?:TARJETA|T\.I\.)\s*(?:NÚMERO|NUMERO)\s*[\.:]*\s*(\d{8,12})/i;
-            const pepRegex = /(?:NO\.|PERMISO)\s*(\d{8,15})/i; // Permiso Especial de Permanencia o PPT
+            const pptRegex = /(?:NO\.|PERMISO|PEP|PPT)\s*(\d{8,15})/i; 
 
             for (const line of lines) {
                 let match;
-
-                // Cédula de Ciudadanía (CC)
                 if (match = line.match(ccRegex)) {
                     docType = 'CC';
-                    // Limpiar el número de puntos y espacios
-                    docNumber = match[1].replace(/[\.\s]/g, '');
+                    docNumber = match[1];
                     break; 
                 }
-                
-                // Tarjeta de Identidad (TI)
                 if (match = line.match(tiRegex)) {
                     docType = 'TI';
-                    docNumber = match[1].replace(/[\.\s]/g, '');
+                    docNumber = match[1];
                     break; 
                 }
-
-                 // Permiso por Protección Temporal (PPT) o similares (PEPx)
-                if (match = line.match(pepRegex)) {
+                if (match = line.match(pptRegex)) {
                     docType = 'PPT/PEP';
-                    docNumber = match[1].replace(/[\.\s]/g, '');
+                    docNumber = match[1];
                     break; 
                 }
             }
-
-            // 2. Identificar Nombre y Apellidos
             
-            // Esto es la parte más difícil del OCR. Buscamos líneas que contengan las palabras clave.
+            // Buscar nombre y apellido
             let apellidoLine = lines.find(l => l.includes('APELLIDO') || l.includes('APELLIDOS'));
             let nombreLine = lines.find(l => l.includes('NOMBRE') || l.includes('NOMBRES'));
 
             if (apellidoLine && nombreLine) {
-                // Intentar extraer el texto que sigue a la palabra clave
                 const cleanApellido = apellidoLine.replace(/(?:APELLIDOS|APELLIDO)\s*[\.:]*\s*/i, '').trim();
                 const cleanNombre = nombreLine.replace(/(?:NOMBRES|NOMBRE)\s*[\.:]*\s*/i, '').trim();
                 
                 fullName = `${cleanNombre} ${cleanApellido}`.trim();
-                
-                // Si la extracción del nombre fue exitosa, actualizar el resultado
-                if (fullName.length > 5 && fullName !== 'N/A') {
-                     // Solo actualizar si encontramos algo que parezca un nombre
-                     defaultResult.nombreCompleto = fullName;
-                }
             }
-            
-            // Resultado final
+
             return {
                 tipoDocumento: docType,
-                numeroDocumento: docNumber,
-                nombreCompleto: fullName.length > 5 ? fullName : defaultResult.nombreCompleto
+                numeroDocumento: docNumber.replace(/[\.\s]/g, '') || defaultResult.numeroDocumento,
+                nombreCompleto: fullName || defaultResult.nombreCompleto
             };
         }
 
-        // --- Inicialización ---
+
+        // --- Exportación a CSV (Excel) ---
+
+        function exportToCSV() {
+            if (documentsData.length === 0) {
+                alert('No hay datos para exportar.');
+                return;
+            }
+            
+            // 1. Crear el encabezado CSV
+            const headers = ['TIPO_DOCUMENTO', 'NUMERO_DOCUMENTO', 'NOMBRE_COMPLETO', 'FECHA_CAPTURA'];
+            let csvContent = headers.join(',') + '\n';
+
+            // 2. Llenar las filas
+            documentsData.forEach(doc => {
+                const row = [
+                    `"${doc.type}"`,
+                    `"${doc.documentNumber}"`,
+                    `"${doc.fullName.replace(/"/g, '""')}"`, // Escapar comillas dobles
+                    `"${new Date(doc.scanDate).toLocaleString('es-CO')}"`
+                ];
+                csvContent += row.join(',') + '\n';
+            });
+
+            // 3. Crear el BLOB y el enlace de descarga
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            
+            // Compatibilidad con IE (por si acaso)
+            if (navigator.msSaveBlob) { 
+                navigator.msSaveBlob(blob, 'Documentos_Escaneados.csv');
+            } else {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "Documentos_Escaneados.csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+            setStatus(`Exportación a CSV exitosa.`, 'success');
+        }
+
+        // --- Inicialización y Eventos ---
         
         async function initializeTesseractWorker() {
             setStatus('Cargando núcleo de OCR (Tesseract.js)...', 'info');
              try {
-                // Crear el worker de Tesseract (web worker para procesamiento en segundo plano)
-                worker = await Tesseract.createWorker('spa'); // Usar español para documentos colombianos
-                setStatus('Tesseract Worker cargado. Listo para iniciar cámara.', 'success');
+                worker = await Tesseract.createWorker('spa'); 
+                setStatus('Tesseract Worker cargado. Listo para iniciar.', 'success');
                 cameraButton.disabled = false;
+                loadData(); // Cargar datos locales al iniciar
             } catch (error) {
-                setStatus('❌ Error: Falló la inicialización de Tesseract. Revisa la conexión.', 'error');
+                setStatus('❌ Error: Falló la inicialización de Tesseract.', 'error');
                 console.error(error);
                 cameraButton.disabled = true;
             }
         }
         
-        cameraButton.addEventListener('click', startCamera);
-        captureButton.addEventListener('click', captureImage);
+        cameraButton.addEventListener('click', startCameraAndAutoCapture);
+        exportButton.addEventListener('click', exportToCSV);
+        clearButton.addEventListener('click', () => {
+             if (confirm('¿Estás seguro de que quieres eliminar TODOS los datos escaneados? Esta acción es irreversible.')) {
+                 localStorage.removeItem(STORAGE_KEY);
+                 documentsData = [];
+                 updateUIList();
+                 setStatus('Datos locales eliminados con éxito.', 'info');
+             }
+        });
 
-        // Iniciar la carga del worker
         document.addEventListener('DOMContentLoaded', initializeTesseractWorker);
     </script>
 </body>
