@@ -69,7 +69,7 @@
             width: 100%;
             height: 100%;
             display: block;
-            border: 5px solid #2980b9; /* Borde para indicar que está activo */
+            border: 5px solid #2980b9; 
         }
         #canvas { display: none; } 
 
@@ -105,7 +105,7 @@
     <div id="status-message" class="message info">Cargando Tesseract.js...</div>
 
     <div class="btn-group">
-        <button id="cameraButton">Iniciar Captura Automática</button>
+        <button id="cameraButton" disabled>Iniciar Captura Automática</button>
         <button id="exportButton" disabled>Descargar Excel (CSV)</button>
         <button id="clearButton">Limpiar Datos Locales</button>
     </div>
@@ -193,7 +193,8 @@
                  return;
             }
             
-            documentsData.slice(-10).reverse().forEach(doc => { // Mostrar los últimos 10
+            // Mostrar los últimos 10 documentos capturados, del más reciente al más antiguo
+            documentsData.slice().reverse().slice(0, 10).forEach(doc => { 
                 const li = document.createElement('li');
                 li.textContent = `${doc.documentNumber} - ${doc.fullName} (${doc.type})`;
                 capturedList.appendChild(li);
@@ -232,11 +233,12 @@
             stopCameraStream();
             isCameraActive = false;
             toggleCameraView(false);
-            setStatus('Captura automática detenida.', 'info');
+            // El estado se actualiza en la función que llama a stopAutoCapture
         }
 
         async function startCameraAndAutoCapture() {
             if (isCameraActive) {
+                setStatus('Captura automática detenida por el usuario.', 'info');
                 stopAutoCapture();
                 return;
             }
@@ -244,7 +246,6 @@
             setStatus('Solicitando permiso de cámara...', 'info');
             
             try {
-                // Obtener stream de la cámara trasera
                 currentStream = await navigator.mediaDevices.getUserMedia({ 
                     video: { facingMode: { ideal: 'environment' } } 
                 });
@@ -255,17 +256,17 @@
                 isCameraActive = true;
                 toggleCameraView(true);
                 
-                // Iniciar la captura automática después de 3 segundos
+                // Iniciar la captura automática después del delay
                 setStatus(`Cámara activa. Captura automática en ${CAPTURE_DELAY_MS / 1000}s...`, 'warning');
                 autoCaptureTimer = setTimeout(captureAndProcess, CAPTURE_DELAY_MS);
 
             } catch (error) {
                 console.error('Error al acceder a la cámara:', error);
-                let message = '❌ Error al iniciar la cámara.';
+                let message = '❌ Error al iniciar la cámara. ';
                 if (error.name === 'NotAllowedError') {
-                    message = '⚠️ Permiso denegado. Habilita el acceso a la cámara en tu navegador.';
+                    message += '⚠️ Permiso denegado. Habilita el acceso a la cámara en tu navegador.';
                 } else if (error.name === 'NotFoundError') {
-                    message = '⚠️ No se encontró cámara.';
+                    message += '⚠️ No se encontró cámara.';
                 }
                 setStatus(message, 'error');
                 stopAutoCapture();
@@ -302,23 +303,26 @@
                 // Extraer los datos estructurados
                 const extracted = extractDocumentData(text);
                 
-                // Limpiar el número de documento para comparación
-                const uniqueId = extracted.numeroDocumento.replace(/[^a-zA-Z0-9]/g, ''); 
+                // Limpiar el número de documento para comparación de duplicados
+                const uniqueId = extracted.numeroDocumento.replace(/[^0-9]/g, ''); 
                 
                 docTypeSpan.textContent = extracted.tipoDocumento;
                 docNumberSpan.textContent = extracted.numeroDocumento;
                 fullNameSpan.textContent = extracted.nombreCompleto;
                 
-                // 4. Detección de Duplicados
+                // 4. Detección de Duplicados y Validación
                 const isDuplicate = documentsData.some(doc => doc.uniqueId === uniqueId);
                 
-                if (isDuplicate) {
+                if (!uniqueId || uniqueId === 'N/A' || extracted.nombreCompleto === 'N/A') {
+                    scanStatusSpan.textContent = 'FALLIDO';
+                    setStatus('❌ No se pudo extraer el Número y/o Nombre. Intenta de nuevo.', 'error');
+                } else if (isDuplicate) {
                     scanStatusSpan.textContent = 'DUPLICADO';
                     setStatus(`⚠️ Documento ${uniqueId} ya ha sido escaneado. No guardado.`, 'warning');
-                } else if (uniqueId && uniqueId !== 'N/A' && extracted.nombreCompleto !== 'N/A') {
+                } else {
                     // 5. Guardar el nuevo documento
                     const newDoc = {
-                        uniqueId: uniqueId, // ID limpio para la verificación
+                        uniqueId: uniqueId, 
                         documentNumber: extracted.numeroDocumento,
                         type: extracted.tipoDocumento,
                         fullName: extracted.nombreCompleto,
@@ -329,9 +333,6 @@
                     
                     scanStatusSpan.textContent = 'GUARDADO';
                     setStatus(`✅ Documento ${uniqueId} guardado con éxito. Total: ${documentsData.length}.`, 'success');
-                } else {
-                    scanStatusSpan.textContent = 'FALLIDO';
-                    setStatus('❌ No se pudo extraer el Número y/o Nombre. Intenta con mejor enfoque.', 'error');
                 }
                 
             } catch (error) {
@@ -342,7 +343,7 @@
         }
 
 
-        // --- Lógica de Extracción (MISMA LÓGICA ROBUSTA) ---
+        // --- Lógica de Extracción Mejorada (Parsing) ---
 
         function extractDocumentData(ocrText) {
             const defaultResult = {
@@ -352,49 +353,64 @@
             };
 
             const normalizedText = ocrText.toUpperCase().replace(/\s+/g, ' ').trim();
-            const lines = normalizedText.split('\n').map(line => line.trim()).filter(line => line.length > 3);
+            const lines = ocrText.toUpperCase().split('\n').map(line => line.trim()).filter(line => line.length > 3);
 
             let docType = 'N/A';
             let docNumber = 'N/A';
             let fullName = 'N/A';
             
-            const ccRegex = /(?:CEDULA|NÚMERO|NUMERO|NUIP)\s*[\.:]*\s*(\d{1,3}[\.\s]\d{3}[\.\s]\d{3}[\.\s]\d{3}|\d{8,12})/i;
-            const tiRegex = /(?:TARJETA|T\.I\.)\s*(?:NÚMERO|NUMERO)\s*[\.:]*\s*(\d{8,12})/i;
-            const pptRegex = /(?:NO\.|PERMISO|PEP|PPT)\s*(\d{8,15})/i; 
+            // Expresiones Regulares para identificación de campos
+            const idRegex = /(?:NUIP|CÉDULA|CEDULA|NÚMERO|NUMERO|NO\.)\s*[\.:]*\s*(\d{1,3}[\.\s]\d{3}[\.\s]\d{3}[\.\s]\d{3}|\d{7,15})/i;
+            const migraRegex = /(?:MIGRACIÓN|PERMISO\sPOR\sPROTECCIÓN\sTEMPORAL|PEP|PPT|DNI\/NIF|NO\.)\s*(\d{7,15})/i; 
 
+            // 1. Búsqueda de Número y Tipo (más importante para la clave)
             for (const line of lines) {
                 let match;
-                if (match = line.match(ccRegex)) {
-                    docType = 'CC';
+                
+                if (match = line.match(migraRegex)) {
                     docNumber = match[1];
-                    break; 
+                    docType = 'MIGRA/PPT/PEP';
+                    break;
                 }
-                if (match = line.match(tiRegex)) {
-                    docType = 'TI';
+                if (match = line.match(idRegex)) {
                     docNumber = match[1];
-                    break; 
-                }
-                if (match = line.match(pptRegex)) {
-                    docType = 'PPT/PEP';
-                    docNumber = match[1];
-                    break; 
+                    docType = line.includes('TARJETA') || line.includes('TI') ? 'TI' : 'CC';
+                    break;
                 }
             }
             
-            // Buscar nombre y apellido
-            let apellidoLine = lines.find(l => l.includes('APELLIDO') || l.includes('APELLIDOS'));
-            let nombreLine = lines.find(l => l.includes('NOMBRE') || l.includes('NOMBRES'));
+            // 2. Búsqueda de Nombre y Apellidos
+            let apellidoText = '';
+            let nombreText = '';
 
-            if (apellidoLine && nombreLine) {
-                const cleanApellido = apellidoLine.replace(/(?:APELLIDOS|APELLIDO)\s*[\.:]*\s*/i, '').trim();
-                const cleanNombre = nombreLine.replace(/(?:NOMBRES|NOMBRE)\s*[\.:]*\s*/i, '').trim();
+            for (const line of lines) {
+                if (line.includes('APELLIDO')) {
+                    apellidoText = line;
+                }
+                if (line.includes('NOMBRE') && !line.includes('COMPLETO')) { // Evitar NOMBRE COMPLETO si no es el valor
+                    nombreText = line;
+                }
+            }
+            
+            if (apellidoText || nombreText) {
+                // Limpiar la línea y dejar solo los nombres/apellidos
+                const cleanApellido = apellidoText.replace(/(?:APELLIDOS|APELLIDO)\s*[\.:]*\s*/i, '').trim();
+                const cleanNombre = nombreText.replace(/(?:NOMBRES|NOMBRE|NOMBRE\sCOMPLETO)\s*[\.:]*\s*/i, '').trim();
                 
-                fullName = `${cleanNombre} ${cleanApellido}`.trim();
+                // Si encontramos ambas etiquetas, las juntamos
+                if (cleanApellido && cleanNombre) {
+                    fullName = `${cleanNombre} ${cleanApellido}`.trim();
+                } else {
+                    // Si solo hay una línea, podría ser el nombre completo (ej. documentos antiguos)
+                    fullName = cleanNombre || cleanApellido || 'N/A';
+                }
             }
 
+            // Resultado final
             return {
                 tipoDocumento: docType,
-                numeroDocumento: docNumber.replace(/[\.\s]/g, '') || defaultResult.numeroDocumento,
+                // Limpiar el número de documento de puntos y espacios antes de devolverlo
+                numeroDocumento: docNumber.replace(/[\.\s]/g, '') || defaultResult.numeroDocumento, 
                 nombreCompleto: fullName || defaultResult.nombreCompleto
             };
         }
@@ -417,7 +433,7 @@
                 const row = [
                     `"${doc.type}"`,
                     `"${doc.documentNumber}"`,
-                    `"${doc.fullName.replace(/"/g, '""')}"`, // Escapar comillas dobles
+                    `"${doc.fullName.replace(/"/g, '""')}"`, 
                     `"${new Date(doc.scanDate).toLocaleString('es-CO')}"`
                 ];
                 csvContent += row.join(',') + '\n';
@@ -427,7 +443,6 @@
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
             
-            // Compatibilidad con IE (por si acaso)
             if (navigator.msSaveBlob) { 
                 navigator.msSaveBlob(blob, 'Documentos_Escaneados.csv');
             } else {
@@ -450,9 +465,9 @@
                 worker = await Tesseract.createWorker('spa'); 
                 setStatus('Tesseract Worker cargado. Listo para iniciar.', 'success');
                 cameraButton.disabled = false;
-                loadData(); // Cargar datos locales al iniciar
+                loadData(); 
             } catch (error) {
-                setStatus('❌ Error: Falló la inicialización de Tesseract.', 'error');
+                setStatus('❌ Error: Falló la inicialización de Tesseract. Revisa la conexión a internet.', 'error');
                 console.error(error);
                 cameraButton.disabled = true;
             }
